@@ -1,10 +1,15 @@
 """Tests for advanced aggregate functions."""
 
 from chorm.sql.expression import (
-    top_k, top_k_weighted, group_bitmap,
-    group_bit_and, group_bit_or, group_bit_xor,
-    any_last, any_heavy,
-    Identifier
+    top_k,
+    top_k_weighted,
+    group_bitmap,
+    group_bit_and,
+    group_bit_or,
+    group_bit_xor,
+    any_last,
+    any_heavy,
+    Identifier,
 )
 
 
@@ -15,7 +20,10 @@ def test_top_k():
 
 def test_top_k_weighted():
     """Test topKWeighted aggregate."""
-    assert top_k_weighted(10, Identifier("product_id"), Identifier("quantity")).to_sql() == "topKWeighted(10, product_id, quantity)"
+    assert (
+        top_k_weighted(10, Identifier("product_id"), Identifier("quantity")).to_sql()
+        == "topKWeighted(10, product_id, quantity)"
+    )
 
 
 def test_group_bitmap():

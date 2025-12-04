@@ -17,7 +17,7 @@ class Explain(Expression):
         settings: Optional[Dict[str, Any]] = None,
     ) -> None:
         """Initialize EXPLAIN statement.
-        
+
         Args:
             statement: The statement to explain (usually a Select)
             explain_type: Type of explanation (AST, SYNTAX, PLAN, PIPELINE, ESTIMATE, TABLE OVERRIDE)
@@ -30,7 +30,7 @@ class Explain(Expression):
     def to_sql(self) -> str:
         """Render the EXPLAIN statement to SQL."""
         sql = f"EXPLAIN {self.explain_type}"
-        
+
         if self._settings:
             settings_list = []
             for k, v in self._settings.items():
@@ -39,8 +39,8 @@ class Explain(Expression):
                     val_str = f"'{v}'"
                 settings_list.append(f"{k}={val_str}")
             sql += f" {', '.join(settings_list)}"
-            
+
         stmt_sql = self.statement.to_sql() if hasattr(self.statement, "to_sql") else str(self.statement)
         sql += f" {stmt_sql}"
-        
+
         return sql

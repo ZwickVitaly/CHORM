@@ -25,7 +25,6 @@ from chorm.exceptions import TypeConversionError
 ConversionError = TypeConversionError
 
 
-
 @dataclass(frozen=True, slots=True)
 class ConversionContext:
     """Optional hints controlling conversions."""
@@ -78,10 +77,7 @@ class IntegerType(FieldType):
         except (TypeError, ValueError) as exc:
             raise ConversionError(f"Expected integer for {self.ch_type}, got {value!r}") from exc
         if not (self._min <= converted <= self._max):
-            raise ConversionError(
-                f"Value {converted} out of range for {self.ch_type} "
-                f"[{self._min}, {self._max}]"
-            )
+            raise ConversionError(f"Value {converted} out of range for {self.ch_type} " f"[{self._min}, {self._max}]")
         return converted
 
 
@@ -232,9 +228,7 @@ class DecimalType(FieldType):
             try:
                 return python_value.quantize(quantize_target)
             except (ArithmeticError, ValueError) as exc:
-                raise ConversionError(
-                    f"Decimal {python_value} does not fit scale {self.scale}"
-                ) from exc
+                raise ConversionError(f"Decimal {python_value} does not fit scale {self.scale}") from exc
 
 
 class StringType(FieldType):
@@ -321,9 +315,7 @@ class FixedStringType(FieldType):
         if data is None:
             return None
         if len(data) != self.length:
-            raise ConversionError(
-                f"{self.ch_type} expects exactly {self.length} bytes, got {len(data)}"
-            )
+            raise ConversionError(f"{self.ch_type} expects exactly {self.length} bytes, got {len(data)}")
         return data
 
 
@@ -349,7 +341,9 @@ class IPAddressType(FieldType):
         super().__init__(ch_type)
         self._version = version
 
-    def to_python(self, value: Any, *, context: ConversionContext | None = None) -> Union[IPv4Address, IPv6Address, None]:
+    def to_python(
+        self, value: Any, *, context: ConversionContext | None = None
+    ) -> Union[IPv4Address, IPv6Address, None]:
         if value is None:
             return None
         address = ip_address(value)
@@ -514,13 +508,8 @@ class TupleType(FieldType):
         if not isinstance(value, Sequence):
             raise ConversionError(f"Expected sequence for {self.ch_type}, got {value!r}")
         if len(value) != len(self.elements):
-            raise ConversionError(
-                f"{self.ch_type} expects {len(self.elements)} items, got {len(value)}"
-            )
-        return tuple(
-            field.to_python(item, context=context)
-            for field, item in zip(self.elements, value)
-        )
+            raise ConversionError(f"{self.ch_type} expects {len(self.elements)} items, got {len(value)}")
+        return tuple(field.to_python(item, context=context) for field, item in zip(self.elements, value))
 
     def to_clickhouse(self, value: Any, *, context: ConversionContext | None = None) -> Tuple[Any, ...] | None:
         if value is None:
@@ -528,13 +517,8 @@ class TupleType(FieldType):
         if not isinstance(value, Sequence):
             raise ConversionError(f"Expected sequence for {self.ch_type}, got {value!r}")
         if len(value) != len(self.elements):
-            raise ConversionError(
-                f"{self.ch_type} expects {len(self.elements)} items, got {len(value)}"
-            )
-        return tuple(
-            field.to_clickhouse(item, context=context)
-            for field, item in zip(self.elements, value)
-        )
+            raise ConversionError(f"{self.ch_type} expects {len(self.elements)} items, got {len(value)}")
+        return tuple(field.to_clickhouse(item, context=context) for field, item in zip(self.elements, value))
 
 
 class MapType(FieldType):
@@ -706,7 +690,7 @@ def _split_name_and_args(type_spec: str) -> Tuple[str, str]:
     if depth != 0:
         raise ConversionError(f"Unbalanced parentheses in {type_spec!r}")
     name = type_spec[:start].strip()
-    args = type_spec[start + 1: idx].strip()
+    args = type_spec[start + 1 : idx].strip()
     return name, args
 
 
@@ -784,6 +768,7 @@ IPv6 = IPAddressType
 Bool = BooleanType
 Float32 = Float32
 Float64 = Float64
+
 
 # Factory functions for types that require arguments
 def Date() -> DateType:

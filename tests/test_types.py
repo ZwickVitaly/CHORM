@@ -113,9 +113,7 @@ def test_date_and_datetime_conversion_with_timezone() -> None:
 
 def test_nullable_and_array() -> None:
     field = parse_type("Array(Nullable(UUID))")
-    value = field.to_clickhouse(
-        ["12345678-1234-5678-1234-567812345678", None]
-    )
+    value = field.to_clickhouse(["12345678-1234-5678-1234-567812345678", None])
     assert value[0].hex == "12345678123456781234567812345678"
     assert value[1] is None
 

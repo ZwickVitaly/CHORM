@@ -18,7 +18,6 @@ from chorm.validators import Validator, validate_value
 DeclarativeError = ConfigurationError
 
 
-
 class Column(Expression):
     """Descriptor representing a ClickHouse table column."""
 
@@ -62,21 +61,17 @@ class Column(Expression):
     def __set__(self, instance: "Table", value: Any) -> None:
         if self.name is None:
             raise AttributeError("Column not bound to class")
-        
+
         # Validate value if validators are defined
         if self.validators:
             # Check nullable first
             if value is None and not self.nullable:
-                raise ValidationError(
-                    f"Column '{self.name}' is not nullable",
-                    self.name,
-                    value
-                )
-            
+                raise ValidationError(f"Column '{self.name}' is not nullable", self.name, value)
+
             # Apply validators if value is not None
             if value is not None:
                 value = validate_value(value, self.validators, self.name)
-        
+
         instance.__dict__[self.name] = value
 
     def _generate_default(self) -> Any:
@@ -99,7 +94,7 @@ class Column(Expression):
         if self.name is None:
             raise DeclarativeError("Column not bound to class")
         if hasattr(self, "table") and hasattr(self.table, "__tablename__") and self.table.__tablename__:
-             return f"{self.table.__tablename__}.{self.name}"
+            return f"{self.table.__tablename__}.{self.name}"
         return self.name
 
 
@@ -163,9 +158,7 @@ class TableMeta(type):
 
         # Inherit columns from bases if not overridden
         base_metadata: Iterable[TableMetadata] = (
-            getattr(base, "__table__", None)
-            for base in bases
-            if hasattr(base, "__table__")
+            getattr(base, "__table__", None) for base in bases if hasattr(base, "__table__")
         )
         inherited_columns: Dict[str, Column] = {}
         inherited_engine: TableEngine | None = None
@@ -192,10 +185,7 @@ class TableMeta(type):
         if engine is None:
             engine = inherited_engine
 
-        column_infos = tuple(
-            ColumnInfo(name=col_name, column=column)
-            for col_name, column in all_columns.items()
-        )
+        column_infos = tuple(ColumnInfo(name=col_name, column=column) for col_name, column in all_columns.items())
 
         cls.__table__ = TableMetadata(
             name=tablename,
@@ -250,13 +240,13 @@ class Table(metaclass=TableMeta):
             else:
                 # Trigger default generation via descriptor
                 getattr(self, col_name)
-    
+
     def validate(self) -> None:
         """Validate all column values using their validators.
-        
+
         Raises:
             ValidationError: If any column validation fails
-        
+
         Example:
             user = User(name="Alice", email="alice@example.com")
             user.validate()  # Validates all columns
@@ -265,15 +255,11 @@ class Table(metaclass=TableMeta):
             col_name = col_info.name
             column = col_info.column
             value = getattr(self, col_name)
-            
+
             # Check nullable
             if value is None and not column.nullable:
-                raise ValidationError(
-                    f"Column '{col_name}' is not nullable",
-                    col_name,
-                    value
-                )
-            
+                raise ValidationError(f"Column '{col_name}' is not nullable", col_name, value)
+
             # Apply validators if value is not None
             if value is not None and column.validators:
                 validate_value(value, column.validators, col_name)
@@ -307,10 +293,7 @@ class Table(metaclass=TableMeta):
 
     @classmethod
     def create_all(cls, *, exists_ok: bool = False) -> str:
-        statements = [
-            table_cls.create_table(exists_ok=exists_ok)
-            for table_cls in cls._collect_tables()
-        ]
+        statements = [table_cls.create_table(exists_ok=exists_ok) for table_cls in cls._collect_tables()]
         return ";\n".join(statements) if statements else ""
 
 

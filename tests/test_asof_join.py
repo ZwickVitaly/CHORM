@@ -17,19 +17,13 @@ def test_asof_join_basic():
 
 def test_asof_join_using():
     """Test ASOF JOIN with USING."""
-    stmt = (
-        select(1)
-        .select_from("t1")
-        .asof_join("t2", using=["id", "time"])
-    )
+    stmt = select(1).select_from("t1").asof_join("t2", using=["id", "time"])
     assert stmt.to_sql() == "SELECT 1 FROM t1 ASOF LEFT JOIN t2 USING (id, time)"
 
 
 def test_asof_join_custom_type():
     """Test ASOF JOIN with custom type."""
     stmt = (
-        select(1)
-        .select_from("t1")
-        .asof_join("t2", on=Identifier("t1.time") >= Identifier("t2.time"), type="ASOF JOIN")
+        select(1).select_from("t1").asof_join("t2", on=Identifier("t1.time") >= Identifier("t2.time"), type="ASOF JOIN")
     )
     assert stmt.to_sql() == "SELECT 1 FROM t1 ASOF JOIN t2 ON (t1.time >= t2.time)"

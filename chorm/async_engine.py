@@ -14,7 +14,7 @@ _CONFIG_FIELDS = set(EngineConfig.__dataclass_fields__.keys())
 
 class AsyncEngine:
     """Factory for `clickhouse_connect.driver.asyncclient.AsyncClient` instances.
-    
+
     Supports optional connection pooling for improved performance.
     """
 
@@ -25,28 +25,29 @@ class AsyncEngine:
         pool_size: int | None = None,
         max_overflow: int | None = None,
         pool_timeout: float | None = None,
-        pool_recycle: int | None = None
+        pool_recycle: int | None = None,
     ) -> None:
         self._config = config
         self._connect_args = dict(connect_args or {})
-        
+
         # Connection pooling (optional)
         self._pool = None
         if pool_size is not None:
             from chorm.async_pool import AsyncConnectionPool
+
             self._pool = AsyncConnectionPool(
                 config=config,
                 pool_size=pool_size,
                 max_overflow=max_overflow or 10,
                 timeout=pool_timeout or 30.0,
                 recycle=pool_recycle or 3600,
-                connect_args=self._connect_args
+                connect_args=self._connect_args,
             )
 
     @property
     def config(self) -> EngineConfig:
         return self._config
-    
+
     @property
     def pool(self):
         """Return the connection pool if pooling is enabled."""
@@ -59,10 +60,10 @@ class AsyncEngine:
         **overrides: Any,
     ) -> AsyncConnection:
         """Get a connection from pool or create a new one.
-        
+
         If pooling is enabled, gets connection from pool.
         Otherwise, creates a new connection.
-        
+
         Note: Pool must be initialized before use. Call await engine.pool.initialize()
         or let it auto-initialize on first get().
         """
@@ -79,19 +80,20 @@ class AsyncEngine:
             # Create new connection
             client = self._create_client(settings=settings, **overrides)
             return AsyncConnection(client)
-    
+
     def connection(self, *, settings: Mapping[str, Any] | None = None, **overrides: Any):
         """Async context manager for automatic connection cleanup.
-        
+
         When pooling is enabled, automatically returns connection to pool.
         When pooling is disabled, closes the connection.
-        
+
         Example:
             >>> async with engine.connection() as conn:
             ...     result = await conn.query("SELECT 1")
             >>> # Connection automatically returned to pool or closed
         """
         from chorm._context_managers import _AsyncConnectionContextManager
+
         return _AsyncConnectionContextManager(self, settings=settings, **overrides)
 
     async def execute(
@@ -127,7 +129,7 @@ class AsyncEngine:
         """Create a new async connection."""
         client = await self._create_client(settings=settings, **overrides)
         return AsyncConnection(client)
-    
+
     async def _create_client(
         self,
         *,
@@ -150,7 +152,7 @@ class AsyncEngine:
             # Security parameters
             "verify": self._config.verify,
         }
-        
+
         # Add optional parameters only if set
         if self._config.ca_cert is not None:
             client_kwargs["ca_cert"] = self._config.ca_cert
@@ -179,7 +181,6 @@ class AsyncEngine:
         client_kwargs.update(combined_args)
 
         return await clickhouse_connect.get_async_client(**client_kwargs)
-
 
 
 class AsyncConnection:
@@ -257,7 +258,7 @@ def create_async_engine(
     **kwargs: Any,
 ) -> AsyncEngine:
     """Create an `AsyncEngine` from an optional URL and keyword overrides.
-    
+
     Args:
         url: Optional connection URL
         connect_args: Additional connection arguments
@@ -266,14 +267,14 @@ def create_async_engine(
         pool_timeout: Connection acquisition timeout in seconds (default: 30.0)
         pool_recycle: Connection recycle time in seconds (default: 3600)
         **kwargs: Engine configuration and connection parameters
-    
+
     Returns:
         AsyncEngine instance with optional connection pooling
-    
+
     Example:
         >>> # Without pooling
         >>> engine = create_async_engine("clickhouse://localhost:8123/default")
-        >>> 
+        >>>
         >>> # With pooling
         >>> engine = create_async_engine(
         ...     "clickhouse://localhost:8123/default",
@@ -312,5 +313,5 @@ def create_async_engine(
         pool_size=pool_size,
         max_overflow=max_overflow,
         pool_timeout=pool_timeout,
-        pool_recycle=pool_recycle
+        pool_recycle=pool_recycle,
     )

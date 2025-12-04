@@ -92,7 +92,7 @@ def test_create_async_engine_from_url(async_client: MagicMock, monkeypatch: pyte
 
         async with engine.connection() as connection:
             pass  # Just verify connection works
-        
+
         get_async_client.assert_called_once_with(
             host="db.example.com",
             port=9440,

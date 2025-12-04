@@ -23,12 +23,12 @@ class DropTable(Expression):
     def to_sql(self) -> str:
         """Render the DROP TABLE statement to SQL."""
         table_name = self.table.__tablename__ if hasattr(self.table, "__tablename__") else str(self.table)
-        
+
         sql = "DROP TABLE"
         if self.if_exists:
             sql += " IF EXISTS"
         sql += f" {table_name}"
-        
+
         if self._settings:
             settings_list = []
             for k, v in self._settings.items():
@@ -37,7 +37,7 @@ class DropTable(Expression):
                     val_str = f"'{v}'"
                 settings_list.append(f"{k}={val_str}")
             sql += f" SETTINGS {', '.join(settings_list)}"
-        
+
         return sql
 
 
@@ -57,12 +57,12 @@ class TruncateTable(Expression):
     def to_sql(self) -> str:
         """Render the TRUNCATE TABLE statement to SQL."""
         table_name = self.table.__tablename__ if hasattr(self.table, "__tablename__") else str(self.table)
-        
+
         sql = "TRUNCATE TABLE"
         if self.if_exists:
             sql += " IF EXISTS"
         sql += f" {table_name}"
-        
+
         if self._settings:
             settings_list = []
             for k, v in self._settings.items():
@@ -71,7 +71,7 @@ class TruncateTable(Expression):
                     val_str = f"'{v}'"
                 settings_list.append(f"{k}={val_str}")
             sql += f" SETTINGS {', '.join(settings_list)}"
-        
+
         return sql
 
 
@@ -85,7 +85,7 @@ class RenameTable(Expression):
     def to_sql(self) -> str:
         """Render the RENAME TABLE statement to SQL."""
         old_table_name = self.old_name.__tablename__ if hasattr(self.old_name, "__tablename__") else str(self.old_name)
-        
+
         return f"RENAME TABLE {old_table_name} TO {self.new_name}"
 
 
@@ -115,16 +115,17 @@ class AlterTableAddColumn(Expression):
     def to_sql(self) -> str:
         """Render the ALTER TABLE ADD COLUMN statement to SQL."""
         table_name = self.table.__tablename__ if hasattr(self.table, "__tablename__") else str(self.table)
-        
+
         # Get column definition
         from chorm.declarative import Column
+
         if isinstance(self.column, Column):
             col_name = self.column.name
             col_type = self.column.type.ch_type
-            
+
             # Build column definition
             col_def = f"{col_name} {col_type}"
-            
+
             # Add DEFAULT if specified
             if self.column.default is not None:
                 if isinstance(self.column.default, str):
@@ -134,18 +135,18 @@ class AlterTableAddColumn(Expression):
         else:
             # Assume it's a string with full column definition
             col_def = str(self.column)
-        
+
         sql = f"ALTER TABLE {table_name} ADD COLUMN"
         if self.if_not_exists:
             sql += " IF NOT EXISTS"
         sql += f" {col_def}"
-        
+
         # Add positioning
         if self.first:
             sql += " FIRST"
         elif self.after:
             sql += f" AFTER {self.after}"
-        
+
         if self._settings:
             settings_list = []
             for k, v in self._settings.items():
@@ -154,7 +155,7 @@ class AlterTableAddColumn(Expression):
                     val_str = f"'{v}'"
                 settings_list.append(f"{k}={val_str}")
             sql += f" SETTINGS {', '.join(settings_list)}"
-        
+
         return sql
 
 
@@ -175,12 +176,12 @@ class AlterTableDropColumn(Expression):
     def to_sql(self) -> str:
         """Render the ALTER TABLE DROP COLUMN statement to SQL."""
         table_name = self.table.__tablename__ if hasattr(self.table, "__tablename__") else str(self.table)
-        
+
         sql = f"ALTER TABLE {table_name} DROP COLUMN"
         if self.if_exists:
             sql += " IF EXISTS"
         sql += f" {self.column_name}"
-        
+
         if self._settings:
             settings_list = []
             for k, v in self._settings.items():
@@ -189,7 +190,7 @@ class AlterTableDropColumn(Expression):
                     val_str = f"'{v}'"
                 settings_list.append(f"{k}={val_str}")
             sql += f" SETTINGS {', '.join(settings_list)}"
-        
+
         return sql
 
 
@@ -210,16 +211,17 @@ class AlterTableModifyColumn(Expression):
     def to_sql(self) -> str:
         """Render the ALTER TABLE MODIFY COLUMN statement to SQL."""
         table_name = self.table.__tablename__ if hasattr(self.table, "__tablename__") else str(self.table)
-        
+
         # Get column definition
         from chorm.declarative import Column
+
         if isinstance(self.column, Column):
             col_name = self.column.name
             col_type = self.column.type.ch_type
-            
+
             # Build column definition
             col_def = f"{col_name} {col_type}"
-            
+
             # Add DEFAULT if specified
             if self.column.default is not None:
                 if isinstance(self.column.default, str):
@@ -229,12 +231,12 @@ class AlterTableModifyColumn(Expression):
         else:
             # Assume it's a string with full column definition
             col_def = str(self.column)
-        
+
         sql = f"ALTER TABLE {table_name} MODIFY COLUMN"
         if self.if_exists:
             sql += " IF EXISTS"
         sql += f" {col_def}"
-        
+
         if self._settings:
             settings_list = []
             for k, v in self._settings.items():
@@ -243,7 +245,7 @@ class AlterTableModifyColumn(Expression):
                     val_str = f"'{v}'"
                 settings_list.append(f"{k}={val_str}")
             sql += f" SETTINGS {', '.join(settings_list)}"
-        
+
         return sql
 
 
@@ -265,12 +267,12 @@ class AlterTableRenameColumn(Expression):
     def to_sql(self) -> str:
         """Render the ALTER TABLE RENAME COLUMN statement to SQL."""
         table_name = self.table.__tablename__ if hasattr(self.table, "__tablename__") else str(self.table)
-        
+
         sql = f"ALTER TABLE {table_name} RENAME COLUMN"
         if self.if_exists:
             sql += " IF EXISTS"
         sql += f" {self.old_name} TO {self.new_name}"
-        
+
         if self._settings:
             settings_list = []
             for k, v in self._settings.items():
@@ -279,7 +281,7 @@ class AlterTableRenameColumn(Expression):
                     val_str = f"'{v}'"
                 settings_list.append(f"{k}={val_str}")
             sql += f" SETTINGS {', '.join(settings_list)}"
-        
+
         return sql
 
 
@@ -311,16 +313,16 @@ class AlterTableAddIndex(Expression):
     def to_sql(self) -> str:
         """Render the ALTER TABLE ADD INDEX statement to SQL."""
         table_name = self.table.__tablename__ if hasattr(self.table, "__tablename__") else str(self.table)
-        
+
         # Coerce expression
         expr = _coerce(self.expression)
-        expr_sql = expr.to_sql() if hasattr(expr, 'to_sql') else str(self.expression)
-        
+        expr_sql = expr.to_sql() if hasattr(expr, "to_sql") else str(self.expression)
+
         sql = f"ALTER TABLE {table_name} ADD INDEX"
         if self.if_not_exists:
             sql += " IF NOT EXISTS"
         sql += f" {self.name} {expr_sql} TYPE {self.index_type} GRANULARITY {self.granularity}"
-        
+
         if self._settings:
             settings_list = []
             for k, v in self._settings.items():
@@ -329,7 +331,7 @@ class AlterTableAddIndex(Expression):
                     val_str = f"'{v}'"
                 settings_list.append(f"{k}={val_str}")
             sql += f" SETTINGS {', '.join(settings_list)}"
-        
+
         return sql
 
 
@@ -350,12 +352,12 @@ class AlterTableDropIndex(Expression):
     def to_sql(self) -> str:
         """Render the ALTER TABLE DROP INDEX statement to SQL."""
         table_name = self.table.__tablename__ if hasattr(self.table, "__tablename__") else str(self.table)
-        
+
         sql = f"ALTER TABLE {table_name} DROP INDEX"
         if self.if_exists:
             sql += " IF EXISTS"
         sql += f" {self.name}"
-        
+
         if self._settings:
             settings_list = []
             for k, v in self._settings.items():
@@ -364,7 +366,7 @@ class AlterTableDropIndex(Expression):
                     val_str = f"'{v}'"
                 settings_list.append(f"{k}={val_str}")
             sql += f" SETTINGS {', '.join(settings_list)}"
-        
+
         return sql
 
 
@@ -438,10 +440,10 @@ def add_index(
     index_type: str = "minmax",
     granularity: int = 1,
     if_not_exists: bool = False,
-    **kwargs: Any
+    **kwargs: Any,
 ) -> AlterTableAddIndex:
     """Create an ALTER TABLE ADD INDEX statement.
-    
+
     Args:
         table: Table class or table name
         name: Index name
@@ -457,23 +459,23 @@ def add_index(
             Recommended: 1-4 for most cases, up to 8-16 for very large tables.
         if_not_exists: Add IF NOT EXISTS clause
         **kwargs: Additional SETTINGS parameters
-    
+
     Examples:
         # MinMax index (good for ranges)
         add_index(User, "idx_created", User.created_at, "minmax", granularity=1)
-        
+
         # Bloom filter (good for equality checks)
         add_index(User, "idx_email", User.email, "bloom_filter", granularity=1)
-        
+
         # Bloom filter with custom false positive rate
         add_index(User, "idx_email", User.email, "bloom_filter(0.01)", granularity=1)
-        
+
         # Set index (good for low cardinality)
         add_index(User, "idx_country", User.country, "set(100)", granularity=4)
-        
+
         # Token bloom filter (good for text search)
         add_index(User, "idx_name", User.name, "tokenbf_v1(256, 3, 0)", granularity=1)
-        
+
         # N-gram bloom filter (good for substring search)
         add_index(User, "idx_desc", User.description, "ngrambf_v1(4, 512, 3, 0)", granularity=2)
     """
@@ -486,6 +488,7 @@ def drop_index(table: Any, name: str, if_exists: bool = True, **settings: Any) -
     if settings:
         stmt.settings(**settings)
     return stmt
+
 
 class AlterTableModifyTTL(Expression):
     """Represents an ALTER TABLE ... MODIFY TTL statement."""
@@ -503,9 +506,9 @@ class AlterTableModifyTTL(Expression):
     def to_sql(self) -> str:
         """Render the ALTER TABLE MODIFY TTL statement to SQL."""
         table_name = self.table.__tablename__ if hasattr(self.table, "__tablename__") else str(self.table)
-        
+
         sql = f"ALTER TABLE {table_name} MODIFY TTL {self.ttl_expression}"
-        
+
         if self._settings:
             settings_list = []
             for k, v in self._settings.items():
@@ -514,7 +517,7 @@ class AlterTableModifyTTL(Expression):
                     val_str = f"'{v}'"
                 settings_list.append(f"{k}={val_str}")
             sql += f" SETTINGS {', '.join(settings_list)}"
-        
+
         return sql
 
 
@@ -542,10 +545,10 @@ class DetachPartition(Expression):
     def to_sql(self) -> str:
         """Render the DETACH PARTITION statement to SQL."""
         table_name = self.table.__tablename__ if hasattr(self.table, "__tablename__") else str(self.table)
-        
+
         part_val = f"'{self.partition_id}'" if isinstance(self.partition_id, str) else str(self.partition_id)
         sql = f"ALTER TABLE {table_name} DETACH PARTITION {part_val}"
-        
+
         if self._settings:
             settings_list = []
             for k, v in self._settings.items():
@@ -554,7 +557,7 @@ class DetachPartition(Expression):
                     val_str = f"'{v}'"
                 settings_list.append(f"{k}={val_str}")
             sql += f" SETTINGS {', '.join(settings_list)}"
-        
+
         return sql
 
 
@@ -574,10 +577,10 @@ class AttachPartition(Expression):
     def to_sql(self) -> str:
         """Render the ATTACH PARTITION statement to SQL."""
         table_name = self.table.__tablename__ if hasattr(self.table, "__tablename__") else str(self.table)
-        
+
         part_val = f"'{self.partition_id}'" if isinstance(self.partition_id, str) else str(self.partition_id)
         sql = f"ALTER TABLE {table_name} ATTACH PARTITION {part_val}"
-        
+
         if self._settings:
             settings_list = []
             for k, v in self._settings.items():
@@ -586,7 +589,7 @@ class AttachPartition(Expression):
                     val_str = f"'{v}'"
                 settings_list.append(f"{k}={val_str}")
             sql += f" SETTINGS {', '.join(settings_list)}"
-        
+
         return sql
 
 
@@ -606,10 +609,10 @@ class DropPartition(Expression):
     def to_sql(self) -> str:
         """Render the DROP PARTITION statement to SQL."""
         table_name = self.table.__tablename__ if hasattr(self.table, "__tablename__") else str(self.table)
-        
+
         part_val = f"'{self.partition_id}'" if isinstance(self.partition_id, str) else str(self.partition_id)
         sql = f"ALTER TABLE {table_name} DROP PARTITION {part_val}"
-        
+
         if self._settings:
             settings_list = []
             for k, v in self._settings.items():
@@ -618,7 +621,7 @@ class DropPartition(Expression):
                     val_str = f"'{v}'"
                 settings_list.append(f"{k}={val_str}")
             sql += f" SETTINGS {', '.join(settings_list)}"
-        
+
         return sql
 
 
@@ -639,10 +642,10 @@ class FetchPartition(Expression):
     def to_sql(self) -> str:
         """Render the FETCH PARTITION statement to SQL."""
         table_name = self.table.__tablename__ if hasattr(self.table, "__tablename__") else str(self.table)
-        
+
         part_val = f"'{self.partition_id}'" if isinstance(self.partition_id, str) else str(self.partition_id)
         sql = f"ALTER TABLE {table_name} FETCH PARTITION {part_val} FROM '{self.from_path}'"
-        
+
         if self._settings:
             settings_list = []
             for k, v in self._settings.items():
@@ -651,7 +654,7 @@ class FetchPartition(Expression):
                     val_str = f"'{v}'"
                 settings_list.append(f"{k}={val_str}")
             sql += f" SETTINGS {', '.join(settings_list)}"
-        
+
         return sql
 
 
@@ -717,9 +720,9 @@ class CreateMaterializedView(Expression):
         sql = "CREATE MATERIALIZED VIEW"
         if self.if_not_exists:
             sql += " IF NOT EXISTS"
-        
+
         sql += f" {self.name}"
-        
+
         if self.to_table:
             to_name = self.to_table.__tablename__ if hasattr(self.to_table, "__tablename__") else str(self.to_table)
             sql += f" TO {to_name}"
@@ -727,14 +730,14 @@ class CreateMaterializedView(Expression):
             # Render engine clause
             engine_sql = self.engine.format_clause() if hasattr(self.engine, "format_clause") else str(self.engine)
             sql += f" ENGINE = {engine_sql}"
-            
+
         if self.populate:
             sql += " POPULATE"
-            
+
         # Render query
         query_sql = self.query.to_sql() if hasattr(self.query, "to_sql") else str(self.query)
         sql += f" AS {query_sql}"
-        
+
         if self._settings:
             settings_list = []
             for k, v in self._settings.items():
@@ -743,7 +746,7 @@ class CreateMaterializedView(Expression):
                     val_str = f"'{v}'"
                 settings_list.append(f"{k}={val_str}")
             sql += f" SETTINGS {', '.join(settings_list)}"
-        
+
         return sql
 
 
@@ -794,19 +797,19 @@ class OptimizeTable(Expression):
     def to_sql(self) -> str:
         """Render the OPTIMIZE TABLE statement to SQL."""
         table_name = self.table.__tablename__ if hasattr(self.table, "__tablename__") else str(self.table)
-        
+
         sql = f"OPTIMIZE TABLE {table_name}"
-        
+
         if self.partition is not None:
             part_val = f"'{self.partition}'" if isinstance(self.partition, str) else str(self.partition)
             sql += f" PARTITION {part_val}"
-        
+
         if self.final:
             sql += " FINAL"
-        
+
         if self.deduplicate:
             sql += " DEDUPLICATE"
-        
+
         if self._settings:
             settings_list = []
             for k, v in self._settings.items():
@@ -815,7 +818,7 @@ class OptimizeTable(Expression):
                     val_str = f"'{v}'"
                 settings_list.append(f"{k}={val_str}")
             sql += f" SETTINGS {', '.join(settings_list)}"
-        
+
         return sql
 
 
@@ -827,14 +830,14 @@ def optimize_table(
     **settings: Any,
 ) -> OptimizeTable:
     """Create an OPTIMIZE TABLE statement.
-    
+
     Args:
         table: Table to optimize
         partition: Optional partition to optimize
         final: If True, force final merge
         deduplicate: If True, deduplicate rows
         **settings: Additional settings
-        
+
     Example:
         optimize_table(User, final=True)
         optimize_table(Events, partition='2024-01', deduplicate=True)
@@ -843,6 +846,7 @@ def optimize_table(
     if settings:
         stmt.settings(**settings)
     return stmt
+
 
 class CreateDictionary(Expression):
     """Represents a CREATE DICTIONARY statement."""
@@ -875,29 +879,29 @@ class CreateDictionary(Expression):
         sql = "CREATE DICTIONARY"
         if self.if_not_exists:
             sql += " IF NOT EXISTS"
-        
+
         sql += f" {self.name}"
-        
+
         # Structure (columns)
         structure_parts = []
         for col_name, col_type in self.structure:
             structure_parts.append(f"{col_name} {col_type}")
         sql += f" ({', '.join(structure_parts)})"
-        
+
         # Primary key (first column is typically the key)
         if self.structure:
             sql += f" PRIMARY KEY {self.structure[0][0]}"
-        
+
         # Source
         sql += f" SOURCE({self.source})"
-        
+
         # Layout
         sql += f" LAYOUT({self.layout}())"
-        
+
         # Lifetime
         if self.lifetime is not None:
             sql += f" LIFETIME({self.lifetime})"
-        
+
         if self._settings:
             settings_list = []
             for k, v in self._settings.items():
@@ -906,7 +910,7 @@ class CreateDictionary(Expression):
                     val_str = f"'{v}'"
                 settings_list.append(f"{k}={val_str}")
             sql += f" SETTINGS {', '.join(settings_list)}"
-        
+
         return sql
 
 

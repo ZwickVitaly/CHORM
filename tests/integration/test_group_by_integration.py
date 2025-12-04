@@ -40,7 +40,7 @@ def engine():
     host = os.getenv("CLICKHOUSE_HOST", "localhost")
     port = int(os.getenv("CLICKHOUSE_PORT", "8123"))
     database = os.getenv("CLICKHOUSE_DB", "default")
-    
+
     engine = create_engine(
         host=host,
         port=port,
@@ -55,18 +55,18 @@ def engine():
 def setup_tables(engine):
     """Create test tables and insert data."""
     session = Session(engine)
-    
+
     # Drop tables if they exist
     try:
         session.execute(f"DROP TABLE IF EXISTS {User.__tablename__}")
         session.execute(f"DROP TABLE IF EXISTS {Order.__tablename__}")
     except Exception:
         pass
-    
+
     # Create tables
     session.execute(User.create_table(exists_ok=True))
     session.execute(Order.create_table(exists_ok=True))
-    
+
     # Insert test data
     # Users
     users_data = [
@@ -78,7 +78,7 @@ def setup_tables(engine):
     ]
     for user in users_data:
         session.execute(insert(User).values(**user.to_dict()))
-    
+
     # Orders
     orders_data = [
         Order(id=1, user_id=1, amount=100, status="completed", date="2024-01-01"),
@@ -90,11 +90,11 @@ def setup_tables(engine):
     ]
     for order in orders_data:
         session.execute(insert(Order).values(**order.to_dict()))
-    
+
     session.commit()
-    
+
     yield
-    
+
     # Cleanup
     try:
         session.execute(f"DROP TABLE IF EXISTS {User.__tablename__}")
@@ -107,15 +107,11 @@ def setup_tables(engine):
 def test_group_by_count_integration(engine, setup_tables):
     """Test GROUP BY with COUNT."""
     session = Session(engine)
-    
-    stmt = (
-        select(User.city, func.count(User.id))
-        .group_by(User.city)
-        .order_by(User.city)
-    )
-    
+
+    stmt = select(User.city, func.count(User.id)).group_by(User.city).order_by(User.city)
+
     result = session.execute(stmt).all()
-    
+
     # Expected: London: 2, Moscow: 2, SPB: 1
     # Sorted by city: London, Moscow, SPB
     assert len(result) == 3
@@ -127,15 +123,15 @@ def test_group_by_count_integration(engine, setup_tables):
 def test_group_by_multiple_columns_integration(engine, setup_tables):
     """Test GROUP BY with multiple columns."""
     session = Session(engine)
-    
+
     stmt = (
         select(User.country, User.city, func.count(User.id))
         .group_by(User.country, User.city)
         .order_by(User.country, User.city)
     )
-    
+
     result = session.execute(stmt).all()
-    
+
     # Expected: Russia/Moscow: 2, Russia/SPB: 1, UK/London: 2
     assert len(result) == 3
     # Use index access for Row objects
@@ -147,16 +143,13 @@ def test_group_by_multiple_columns_integration(engine, setup_tables):
 def test_having_integration(engine, setup_tables):
     """Test HAVING clause."""
     session = Session(engine)
-    
+
     stmt = (
-        select(User.city, func.count(User.id))
-        .group_by(User.city)
-        .having(func.count(User.id) > 1)
-        .order_by(User.city)
+        select(User.city, func.count(User.id)).group_by(User.city).having(func.count(User.id) > 1).order_by(User.city)
     )
-    
+
     result = session.execute(stmt).all()
-    
+
     # Should only return cities with > 1 user (London, Moscow)
     assert len(result) == 2
     cities = {row[0] for row in result}
@@ -168,28 +161,23 @@ def test_having_integration(engine, setup_tables):
 def test_aggregations_integration(engine, setup_tables):
     """Test various aggregation functions."""
     session = Session(engine)
-    
+
     stmt = (
-        select(
-            Order.status,
-            func.count(Order.id),
-            func.sum(Order.amount),
-            func.max(Order.amount)
-        )
+        select(Order.status, func.count(Order.id), func.sum(Order.amount), func.max(Order.amount))
         .group_by(Order.status)
         .order_by(Order.status)
     )
-    
+
     result = session.execute(stmt).all()
-    
+
     # Statuses: completed (3 orders), failed (1 order), pending (2 orders)
     # completed: 100+200+300 = 600
     # failed: 500
     # pending: 150+50 = 200
-    
+
     # Build map using Row index access
     results_map = {row[0]: (row[1], row[2], row[3]) for row in result}
-    
+
     assert results_map["completed"] == (3, 600, 300)
     assert results_map["failed"] == (1, 500, 500)
     assert results_map["pending"] == (2, 200, 150)
@@ -198,16 +186,14 @@ def test_aggregations_integration(engine, setup_tables):
 def test_group_by_expression_integration(engine, setup_tables):
     """Test GROUP BY with expression."""
     session = Session(engine)
-    
+
     # Group by year-month of order date
     stmt = (
-        select(func.toYYYYMM(Order.date), func.count(Order.id))
-        .select_from(Order)
-        .group_by(func.toYYYYMM(Order.date))
+        select(func.toYYYYMM(Order.date), func.count(Order.id)).select_from(Order).group_by(func.toYYYYMM(Order.date))
     )
-    
+
     result = session.execute(stmt).all()
-    
+
     # All orders are in 202401
     assert len(result) == 1
     assert result[0][0] == 202401

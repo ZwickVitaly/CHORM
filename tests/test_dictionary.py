@@ -10,7 +10,7 @@ def test_create_dictionary_basic():
         "user_dict",
         "ClickHouse(HOST 'localhost' PORT 9000 USER 'default' TABLE 'users' DB 'default')",
         "HASHED",
-        [("id", "UInt64"), ("name", "String")]
+        [("id", "UInt64"), ("name", "String")],
     )
     expected = (
         "CREATE DICTIONARY user_dict "
@@ -29,7 +29,7 @@ def test_create_dictionary_with_lifetime():
         "ClickHouse(HOST 'localhost' PORT 9000 USER 'default' TABLE 'data' DB 'default')",
         "CACHE",
         [("key", "String"), ("value", "String")],
-        lifetime=300
+        lifetime=300,
     )
     assert "LIFETIME(300)" in stmt.to_sql()
 
@@ -41,7 +41,7 @@ def test_create_dictionary_if_not_exists():
         "ClickHouse(HOST 'localhost' PORT 9000 USER 'default' TABLE 'test' DB 'default')",
         "FLAT",
         [("id", "UInt32")],
-        if_not_exists=True
+        if_not_exists=True,
     )
     assert stmt.to_sql().startswith("CREATE DICTIONARY IF NOT EXISTS")
 

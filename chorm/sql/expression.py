@@ -72,21 +72,21 @@ class Expression:
 
     def is_not(self, other: Any) -> BinaryExpression:
         return BinaryExpression(self, "IS NOT", _coerce(other))
-    
+
     def label(self, name: str) -> Label:
         return Label(name, self)
-    
+
     def asc(self) -> "OrderByClause":
         """Return an ascending ORDER BY clause for this expression.
-        
+
         Example:
             select(User).order_by(User.name.asc())
         """
         return OrderByClause(self, "ASC")
-    
+
     def desc(self) -> "OrderByClause":
         """Return a descending ORDER BY clause for this expression.
-        
+
         Example:
             select(User).order_by(User.created_at.desc())
         """
@@ -158,12 +158,12 @@ class FunctionCall(Expression):
         frame: Optional[str] = None,
     ) -> "WindowFunction":
         """Create a window function expression.
-        
+
         Args:
             partition_by: Expression or list of expressions to partition by
             order_by: Expression or list of expressions to order by
             frame: Window frame specification (e.g. "ROWS BETWEEN 1 PRECEDING AND CURRENT ROW")
-            
+
         Returns:
             WindowFunction expression
         """
@@ -173,14 +173,14 @@ class FunctionCall(Expression):
                 partition_list = [_coerce(p) for p in partition_by]
             else:
                 partition_list = [_coerce(partition_by)]
-                
+
         order_list = []
         if order_by:
             if isinstance(order_by, (list, tuple)):
                 order_list = [_coerce(p) for p in order_by]
             else:
                 order_list = [_coerce(order_by)]
-                
+
         window = Window(partition_by=partition_list, order_by=order_list, frame=frame)
         return WindowFunction(self, window)
 
@@ -188,6 +188,7 @@ class FunctionCall(Expression):
 @dataclass(frozen=True)
 class Window(Expression):
     """Represents a window specification (OVER clause)."""
+
     partition_by: List[Expression]
     order_by: List[Expression]
     frame: Optional[str] = None
@@ -200,13 +201,14 @@ class Window(Expression):
             parts.append(f"ORDER BY {', '.join(o.to_sql() for o in self.order_by)}")
         if self.frame:
             parts.append(self.frame)
-        
+
         return f"OVER ({' '.join(parts)})"
 
 
 @dataclass(frozen=True)
 class WindowFunction(Expression):
     """Represents a function call with a window specification."""
+
     function: FunctionCall
     window: Window
 
@@ -226,6 +228,7 @@ class Label(Expression):
 @dataclass(frozen=True)
 class OrderByClause(Expression):
     """Represents an ORDER BY clause with direction."""
+
     expression: Expression
     direction: str  # "ASC" or "DESC"
 
@@ -236,16 +239,17 @@ class OrderByClause(Expression):
 @dataclass(frozen=True)
 class Subquery(Expression):
     """Represents a subquery (SELECT statement in parentheses)."""
+
     select: Expression
     alias: Optional[str] = None
 
     @property
     def c(self) -> "ColumnNamespace":
         """Column access namespace like SQLAlchemy.
-        
+
         Returns a namespace object that allows accessing columns as attributes:
         subq.c.column_name or subq.c['column_name']
-        
+
         Example:
             daily = select(Order.user_id, func.sum(Order.amount).label('total')).subquery('daily')
             query = select(daily.c.user_id, daily.c.total)
@@ -262,6 +266,7 @@ class Subquery(Expression):
 @dataclass(frozen=True)
 class ScalarSubquery(Expression):
     """Represents a scalar subquery (single value)."""
+
     select: Expression
 
     def to_sql(self) -> str:
@@ -271,16 +276,17 @@ class ScalarSubquery(Expression):
 @dataclass(frozen=True)
 class CTE(Expression):
     """Represents a Common Table Expression (CTE) for use in WITH clause."""
+
     name: str
     select: Expression
 
     @property
     def c(self) -> "ColumnNamespace":
         """Column access namespace like SQLAlchemy.
-        
+
         Returns a namespace object that allows accessing columns as attributes:
         cte.c.column_name or cte.c['column_name']
-        
+
         Example:
             monthly = cte(select(Order.user_id, func.sum(Order.amount).label('total')), name='monthly')
             query = select(monthly.c.user_id, monthly.c.total).with_cte(monthly)
@@ -294,10 +300,10 @@ class CTE(Expression):
 
 class ColumnNamespace:
     """Namespace for accessing columns from subqueries and CTEs.
-    
+
     This class provides a convenient way to reference columns from subqueries
     and CTEs, similar to SQLAlchemy's approach.
-    
+
     Example:
         subq = select(User.id, User.name).subquery('u')
         # Access columns via attribute
@@ -305,10 +311,10 @@ class ColumnNamespace:
         # Or via item access
         query = select(subq.c['id'], subq.c['name'])
     """
-    
+
     def __init__(self, source_name: str, stmt: Expression) -> None:
         """Initialize column namespace.
-        
+
         Args:
             source_name: Name of the subquery/CTE (used as table alias in SQL)
             stmt: The SELECT statement to extract columns from
@@ -317,84 +323,82 @@ class ColumnNamespace:
         self._stmt = stmt
         self._columns: dict[str, Identifier] = {}
         self._build_columns()
-    
+
     def _build_columns(self) -> None:
         """Extract column names from SELECT statement."""
         # Check if statement has _columns attribute (Select objects)
-        if not hasattr(self._stmt, '_columns'):
+        if not hasattr(self._stmt, "_columns"):
             return
-        
+
         for col in self._stmt._columns:
             col_name = None
-            
+
             if isinstance(col, Label):
                 # Labeled column: use the label name
                 col_name = col.name
-            elif hasattr(col, 'name'):
+            elif hasattr(col, "name"):
                 # Column object: use its name
                 col_name = col.name
-            elif hasattr(col, '__name__'):
+            elif hasattr(col, "__name__"):
                 # Function or other named object
                 col_name = col.__name__
-            
+
             if col_name:
                 # Create an Identifier for this column
                 self._columns[col_name] = Identifier(f"{self._source_name}.{col_name}")
-    
+
     def __getattr__(self, name: str) -> Identifier:
         """Access column by attribute: subq.c.column_name
-        
+
         Args:
             name: Column name
-            
+
         Returns:
             Identifier expression for the column
-            
+
         Raises:
             AttributeError: If name starts with underscore (reserved for internal use)
         """
-        if name.startswith('_'):
+        if name.startswith("_"):
             raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
-        
+
         # Return known column if exists
         if name in self._columns:
             return self._columns[name]
-        
+
         # Allow dynamic column access even if not in SELECT
         # (useful for SELECT * scenarios or when column tracking is incomplete)
         return Identifier(f"{self._source_name}.{name}")
-    
+
     def __getitem__(self, name: str) -> Identifier:
         """Access column by key: subq.c['column_name']
-        
+
         Args:
             name: Column name
-            
+
         Returns:
             Identifier expression for the column
         """
         return self.__getattr__(name)
-    
+
     def __contains__(self, name: str) -> bool:
         """Check if column exists: 'column_name' in subq.c
-        
+
         Args:
             name: Column name to check
-            
+
         Returns:
             True if column was explicitly selected in the statement
         """
         return name in self._columns
-    
+
     def keys(self) -> list[str]:
         """Return list of known column names.
-        
+
         Returns:
             List of column names that were explicitly selected
         """
         return list(self._columns.keys())
-
-
 
 
 def _coerce(value: Any) -> Expression:
@@ -439,64 +443,83 @@ class _FunctionFactory:
 
 func = FunctionNamespace()
 
+
 # Convenience wrappers
 def cast(expression: Any, type_: str) -> FunctionCall:
     return func.cast(expression, Raw(f"'{type_}'"))
 
+
 def distinct(expression: Any) -> FunctionCall:
     return func.distinct(expression)
+
 
 def sum_(value: Any) -> FunctionCall:
     return func.sum(value)
 
+
 def avg(value: Any) -> FunctionCall:
     return func.avg(value)
+
 
 def min_(value: Any) -> FunctionCall:
     return func.min(value)
 
+
 def max_(value: Any) -> FunctionCall:
     return func.max(value)
+
 
 def count(value: Any | None = None) -> FunctionCall:
     if value is None:
         return func.count()
     return func.count(value)
 
+
 def count_distinct(value: Any) -> FunctionCall:
     return func.countDistinct(value)
+
 
 def lower(value: Any) -> FunctionCall:
     return func.lower(value)
 
+
 def lower_utf8(value: Any) -> FunctionCall:
     return func.lowerUTF8(value)
+
 
 def upper(value: Any) -> FunctionCall:
     return func.upper(value)
 
+
 def upper_utf8(value: Any) -> FunctionCall:
     return func.upperUTF8(value)
+
 
 def coalesce(*args: Any) -> FunctionCall:
     return func.coalesce(*args)
 
+
 def if_null(expr: Any, default: Any) -> FunctionCall:
     return func.ifNull(expr, default)
+
 
 def null_if(expr: Any, null_value: Any) -> FunctionCall:
     return func.nullIf(expr, null_value)
 
+
 def to_date(value: Any) -> FunctionCall:
     return func.toDate(value)
+
 
 def to_datetime(value: Any, timezone: Any | None = None) -> FunctionCall:
     if timezone is not None:
         return func.toDateTime(value, timezone if isinstance(timezone, Expression) else Literal(timezone))
     return func.toDateTime(value)
 
+
 def to_decimal32(value: Any, scale: Any) -> FunctionCall:
     return func.toDecimal32(value, scale)
+
 
 def to_decimal64(value: Any, scale: Any) -> FunctionCall:
     return func.toDecimal64(value, scale)
@@ -535,11 +558,11 @@ def lead(expr: Any, offset: Any = 1, default: Any = None) -> FunctionCall:
 
 def multi_if(*args: Any) -> FunctionCall:
     """ClickHouse multiIf function (CASE WHEN equivalent).
-    
+
     Args:
         *args: Pairs of (condition, result), optionally followed by an else result.
                multiIf(cond1, val1, cond2, val2, ..., else_val)
-        
+
     Example:
         multi_if(
             User.age < 18, 'minor',
@@ -552,12 +575,12 @@ def multi_if(*args: Any) -> FunctionCall:
 
 def if_(condition: Any, then_: Any, else_: Any) -> FunctionCall:
     """ClickHouse if() function (ternary operator).
-    
+
     Args:
         condition: Boolean condition
         then_: Result if true
         else_: Result if false
-        
+
     Example:
         if_(User.age >= 18, 'adult', 'minor')
     """
@@ -567,7 +590,7 @@ def if_(condition: Any, then_: Any, else_: Any) -> FunctionCall:
 # ClickHouse-specific aggregation functions
 def uniq(*args: Any) -> FunctionCall:
     """Approximate COUNT DISTINCT using HyperLogLog.
-    
+
     Example:
         select(func.uniq(User.id)).select_from(User)
     """
@@ -576,7 +599,7 @@ def uniq(*args: Any) -> FunctionCall:
 
 def uniq_exact(*args: Any) -> FunctionCall:
     """Exact COUNT DISTINCT.
-    
+
     Example:
         select(func.uniqExact(User.id)).select_from(User)
     """
@@ -585,11 +608,11 @@ def uniq_exact(*args: Any) -> FunctionCall:
 
 def quantile(level: Any, expr: Any) -> FunctionCall:
     """Calculate quantile (percentile).
-    
+
     Args:
         level: Quantile level (0.0 to 1.0), e.g., 0.5 for median, 0.95 for 95th percentile
         expr: Expression to calculate quantile for
-        
+
     Example:
         select(func.quantile(0.95, Order.amount)).select_from(Order)
     """
@@ -598,11 +621,11 @@ def quantile(level: Any, expr: Any) -> FunctionCall:
 
 def quantiles(levels: Any, expr: Any) -> FunctionCall:
     """Calculate multiple quantiles.
-    
+
     Args:
         levels: Array of quantile levels
         expr: Expression to calculate quantiles for
-        
+
     Example:
         select(func.quantiles([0.25, 0.5, 0.75], Order.amount)).select_from(Order)
     """
@@ -611,7 +634,7 @@ def quantiles(levels: Any, expr: Any) -> FunctionCall:
 
 def median(expr: Any) -> FunctionCall:
     """Calculate median (50th percentile).
-    
+
     Example:
         select(func.median(Order.amount)).select_from(Order)
     """
@@ -620,11 +643,11 @@ def median(expr: Any) -> FunctionCall:
 
 def group_array(expr: Any, max_size: Any = None) -> FunctionCall:
     """Collect values into array.
-    
+
     Args:
         expr: Expression to collect
         max_size: Optional maximum array size (Note: ClickHouse syntax varies by version)
-        
+
     Example:
         select(User.city, func.groupArray(User.name)).group_by(User.city)
     """
@@ -636,7 +659,7 @@ def group_array(expr: Any, max_size: Any = None) -> FunctionCall:
 
 def stddev_pop(expr: Any) -> FunctionCall:
     """Population standard deviation.
-    
+
     Example:
         select(func.stddevPop(Order.amount)).select_from(Order)
     """
@@ -645,7 +668,7 @@ def stddev_pop(expr: Any) -> FunctionCall:
 
 def var_pop(expr: Any) -> FunctionCall:
     """Population variance.
-    
+
     Example:
         select(func.varPop(Order.amount)).select_from(Order)
     """
@@ -654,11 +677,11 @@ def var_pop(expr: Any) -> FunctionCall:
 
 def corr(x: Any, y: Any) -> FunctionCall:
     """Pearson correlation coefficient.
-    
+
     Args:
         x: First variable
         y: Second variable
-        
+
     Example:
         select(func.corr(User.age, Order.amount)).select_from(User).join(Order, ...)
     """
@@ -668,7 +691,7 @@ def corr(x: Any, y: Any) -> FunctionCall:
 # Date/Time helper functions
 def to_start_of_month(date: Any) -> FunctionCall:
     """Round down to start of month.
-    
+
     Example:
         select(func.toStartOfMonth(Order.date), func.sum(Order.amount))
             .group_by(func.toStartOfMonth(Order.date))
@@ -678,11 +701,11 @@ def to_start_of_month(date: Any) -> FunctionCall:
 
 def to_start_of_week(date: Any, mode: Any = 0) -> FunctionCall:
     """Round down to start of week.
-    
+
     Args:
         date: Date expression
         mode: Week mode (0 = Sunday, 1 = Monday, etc.)
-        
+
     Example:
         select(func.toStartOfWeek(Order.date)).select_from(Order)
     """
@@ -691,7 +714,7 @@ def to_start_of_week(date: Any, mode: Any = 0) -> FunctionCall:
 
 def to_start_of_day(date: Any) -> FunctionCall:
     """Round down to start of day.
-    
+
     Example:
         select(func.toStartOfDay(Order.created_at)).select_from(Order)
     """
@@ -700,12 +723,12 @@ def to_start_of_day(date: Any) -> FunctionCall:
 
 def date_diff(unit: str, start: Any, end: Any) -> FunctionCall:
     """Calculate difference between dates.
-    
+
     Args:
         unit: Time unit ('day', 'month', 'year', 'hour', 'minute', 'second')
         start: Start date
         end: End date
-        
+
     Example:
         select(func.dateDiff('day', Order.created_at, func.now())).select_from(Order)
     """
@@ -714,7 +737,7 @@ def date_diff(unit: str, start: Any, end: Any) -> FunctionCall:
 
 def now() -> FunctionCall:
     """Current date and time.
-    
+
     Example:
         select(User.name).where(User.last_login > func.now() - 86400)
     """
@@ -723,7 +746,7 @@ def now() -> FunctionCall:
 
 def today() -> FunctionCall:
     """Current date.
-    
+
     Example:
         select(Order).where(Order.date == func.today())
     """
@@ -733,7 +756,7 @@ def today() -> FunctionCall:
 # String helper functions
 def concat(*args: Any) -> FunctionCall:
     """Concatenate strings.
-    
+
     Example:
         select(func.concat(User.first_name, ' ', User.last_name).label('full_name'))
     """
@@ -742,12 +765,12 @@ def concat(*args: Any) -> FunctionCall:
 
 def substring(s: Any, offset: Any, length: Any = None) -> FunctionCall:
     """Extract substring.
-    
+
     Args:
         s: String expression
         offset: Starting position (1-indexed)
         length: Optional length to extract
-        
+
     Example:
         select(func.substring(User.email, 1, 5)).select_from(User)
     """
@@ -758,11 +781,11 @@ def substring(s: Any, offset: Any, length: Any = None) -> FunctionCall:
 
 def position(haystack: Any, needle: Any) -> FunctionCall:
     """Find position of substring.
-    
+
     Args:
         haystack: String to search in
         needle: String to search for
-        
+
     Example:
         select(func.position(User.email, '@')).select_from(User)
     """
@@ -771,7 +794,7 @@ def position(haystack: Any, needle: Any) -> FunctionCall:
 
 def length(s: Any) -> FunctionCall:
     """String length.
-    
+
     Example:
         select(User.name).where(func.length(User.name) > 10)
     """
@@ -781,11 +804,11 @@ def length(s: Any) -> FunctionCall:
 # ClickHouse conditional aggregations (-If combinator)
 def sum_if(column: Any, condition: Any) -> FunctionCall:
     """Sum values where condition is true.
-    
+
     Args:
         column: Column to sum
         condition: Condition expression
-        
+
     Example:
         select(sumIf(Order.amount, Order.status == 'completed'))
     """
@@ -794,10 +817,10 @@ def sum_if(column: Any, condition: Any) -> FunctionCall:
 
 def count_if(condition: Any) -> FunctionCall:
     """Count rows where condition is true.
-    
+
     Args:
         condition: Condition expression
-        
+
     Example:
         select(countIf(User.age >= 18).label('adults'))
     """
@@ -806,11 +829,11 @@ def count_if(condition: Any) -> FunctionCall:
 
 def avg_if(column: Any, condition: Any) -> FunctionCall:
     """Average values where condition is true.
-    
+
     Args:
         column: Column to average
         condition: Condition expression
-        
+
     Example:
         select(avgIf(Order.amount, User.tier == 'premium'))
     """
@@ -819,11 +842,11 @@ def avg_if(column: Any, condition: Any) -> FunctionCall:
 
 def min_if(column: Any, condition: Any) -> FunctionCall:
     """Minimum value where condition is true.
-    
+
     Args:
         column: Column to find minimum
         condition: Condition expression
-        
+
     Example:
         select(minIf(Order.amount, Order.status == 'completed'))
     """
@@ -832,11 +855,11 @@ def min_if(column: Any, condition: Any) -> FunctionCall:
 
 def max_if(column: Any, condition: Any) -> FunctionCall:
     """Maximum value where condition is true.
-    
+
     Args:
         column: Column to find maximum
         condition: Condition expression
-        
+
     Example:
         select(maxIf(Order.amount, Order.status == 'completed'))
     """
@@ -845,11 +868,11 @@ def max_if(column: Any, condition: Any) -> FunctionCall:
 
 def uniq_if(column: Any, condition: Any) -> FunctionCall:
     """Unique count where condition is true.
-    
+
     Args:
         column: Column to count unique values
         condition: Condition expression
-        
+
     Example:
         select(uniqIf(User.id, User.age >= 18))
     """
@@ -858,11 +881,11 @@ def uniq_if(column: Any, condition: Any) -> FunctionCall:
 
 def group_array_if(column: Any, condition: Any) -> FunctionCall:
     """Collect values into array where condition is true.
-    
+
     Args:
         column: Column to collect
         condition: Condition expression
-        
+
     Example:
         select(groupArrayIf(User.name, User.active == 1))
     """
@@ -871,11 +894,11 @@ def group_array_if(column: Any, condition: Any) -> FunctionCall:
 
 def median_if(column: Any, condition: Any) -> FunctionCall:
     """Median where condition is true.
-    
+
     Args:
         column: Column to calculate median
         condition: Condition expression
-        
+
     Example:
         select(medianIf(Order.amount, Order.status == 'completed'))
     """
@@ -885,10 +908,10 @@ def median_if(column: Any, condition: Any) -> FunctionCall:
 # ClickHouse array functions
 def group_uniq_array(column: Any) -> FunctionCall:
     """Collect unique values into array.
-    
+
     Args:
         column: Column to collect unique values from
-        
+
     Example:
         select(User.city, groupUniqArray(User.tags)).group_by(User.city)
     """
@@ -897,10 +920,10 @@ def group_uniq_array(column: Any) -> FunctionCall:
 
 def sum_array(array_column: Any) -> FunctionCall:
     """Sum all elements in array column.
-    
+
     Args:
         array_column: Array column to sum
-        
+
     Example:
         select(User.id, sumArray(User.daily_amounts))
     """
@@ -909,10 +932,10 @@ def sum_array(array_column: Any) -> FunctionCall:
 
 def avg_array(array_column: Any) -> FunctionCall:
     """Average of array elements.
-    
+
     Args:
         array_column: Array column to average
-        
+
     Example:
         select(User.id, avgArray(User.scores))
     """
@@ -921,10 +944,10 @@ def avg_array(array_column: Any) -> FunctionCall:
 
 def array_concat(*arrays: Any) -> FunctionCall:
     """Concatenate arrays.
-    
+
     Args:
         *arrays: Arrays to concatenate
-        
+
     Example:
         select(arrayConcat(User.tags1, User.tags2))
     """
@@ -933,7 +956,7 @@ def array_concat(*arrays: Any) -> FunctionCall:
 
 def trim(s: Any) -> FunctionCall:
     """Trim whitespace from string.
-    
+
     Example:
         select(func.trim(User.name))
     """
@@ -942,7 +965,7 @@ def trim(s: Any) -> FunctionCall:
 
 def ltrim(s: Any) -> FunctionCall:
     """Trim whitespace from left side of string.
-    
+
     Example:
         select(func.ltrim(User.name))
     """
@@ -951,7 +974,7 @@ def ltrim(s: Any) -> FunctionCall:
 
 def rtrim(s: Any) -> FunctionCall:
     """Trim whitespace from right side of string.
-    
+
     Example:
         select(func.rtrim(User.name))
     """
@@ -960,12 +983,12 @@ def rtrim(s: Any) -> FunctionCall:
 
 def replace(haystack: Any, needle: Any, replacement: Any) -> FunctionCall:
     """Replace all occurrences of substring.
-    
+
     Args:
         haystack: String to search in
         needle: String to search for
         replacement: String to replace with
-        
+
     Example:
         select(func.replace(User.bio, 'bad', 'good'))
     """
@@ -974,11 +997,11 @@ def replace(haystack: Any, needle: Any, replacement: Any) -> FunctionCall:
 
 def split_by_char(separator: Any, s: Any) -> FunctionCall:
     """Split string by character.
-    
+
     Args:
         separator: Character to split by
         s: String to split
-        
+
     Example:
         select(func.splitByChar(',', User.tags_str))
     """
@@ -987,7 +1010,7 @@ def split_by_char(separator: Any, s: Any) -> FunctionCall:
 
 def to_year(date: Any) -> FunctionCall:
     """Extract year from date.
-    
+
     Example:
         select(func.toYear(Order.date))
     """
@@ -996,7 +1019,7 @@ def to_year(date: Any) -> FunctionCall:
 
 def to_month(date: Any) -> FunctionCall:
     """Extract month from date.
-    
+
     Example:
         select(func.toMonth(Order.date))
     """
@@ -1005,7 +1028,7 @@ def to_month(date: Any) -> FunctionCall:
 
 def to_day(date: Any) -> FunctionCall:
     """Extract day of month from date.
-    
+
     Example:
         select(func.toDayOfMonth(Order.date))
     """
@@ -1014,11 +1037,11 @@ def to_day(date: Any) -> FunctionCall:
 
 def add_days(date: Any, delta: Any) -> FunctionCall:
     """Add days to date.
-    
+
     Args:
         date: Date expression
         delta: Number of days to add (can be negative)
-        
+
     Example:
         select(func.addDays(Order.date, 7))
     """
@@ -1027,11 +1050,11 @@ def add_days(date: Any, delta: Any) -> FunctionCall:
 
 def add_months(date: Any, delta: Any) -> FunctionCall:
     """Add months to date.
-    
+
     Args:
         date: Date expression
         delta: Number of months to add
-        
+
     Example:
         select(func.addMonths(Order.date, 1))
     """
@@ -1041,11 +1064,11 @@ def add_months(date: Any, delta: Any) -> FunctionCall:
 # Advanced aggregate functions
 def top_k(k: Any, expr: Any) -> FunctionCall:
     """Top-K aggregate (most frequent values).
-    
+
     Args:
         k: Number of top values to return
         expr: Expression to aggregate
-        
+
     Example:
         select(topK(10, User.country)).select_from(User)
     """
@@ -1054,12 +1077,12 @@ def top_k(k: Any, expr: Any) -> FunctionCall:
 
 def top_k_weighted(k: Any, expr: Any, weight: Any) -> FunctionCall:
     """Top-K aggregate with weights.
-    
+
     Args:
         k: Number of top values to return
         expr: Expression to aggregate
         weight: Weight expression
-        
+
     Example:
         select(topKWeighted(10, Product.id, Order.quantity))
     """
@@ -1068,10 +1091,10 @@ def top_k_weighted(k: Any, expr: Any, weight: Any) -> FunctionCall:
 
 def group_bitmap(expr: Any) -> FunctionCall:
     """Bitmap aggregate (for bitmap operations).
-    
+
     Args:
         expr: Expression to create bitmap from
-        
+
     Example:
         select(groupBitmap(User.id)).select_from(User)
     """
@@ -1080,10 +1103,10 @@ def group_bitmap(expr: Any) -> FunctionCall:
 
 def group_bit_and(expr: Any) -> FunctionCall:
     """Bitwise AND aggregate.
-    
+
     Args:
         expr: Expression to aggregate
-        
+
     Example:
         select(groupBitAnd(Permissions.flags))
     """
@@ -1092,10 +1115,10 @@ def group_bit_and(expr: Any) -> FunctionCall:
 
 def group_bit_or(expr: Any) -> FunctionCall:
     """Bitwise OR aggregate.
-    
+
     Args:
         expr: Expression to aggregate
-        
+
     Example:
         select(groupBitOr(Permissions.flags))
     """
@@ -1104,10 +1127,10 @@ def group_bit_or(expr: Any) -> FunctionCall:
 
 def group_bit_xor(expr: Any) -> FunctionCall:
     """Bitwise XOR aggregate.
-    
+
     Args:
         expr: Expression to aggregate
-        
+
     Example:
         select(groupBitXor(Data.checksum))
     """
@@ -1116,10 +1139,10 @@ def group_bit_xor(expr: Any) -> FunctionCall:
 
 def any_last(expr: Any) -> FunctionCall:
     """Return last encountered value (sampling aggregate).
-    
+
     Args:
         expr: Expression to sample
-        
+
     Example:
         select(anyLast(User.last_login)).group_by(User.country)
     """
@@ -1128,10 +1151,10 @@ def any_last(expr: Any) -> FunctionCall:
 
 def any_heavy(expr: Any) -> FunctionCall:
     """Return frequently occurring value (heavy hitter).
-    
+
     Args:
         expr: Expression to sample
-        
+
     Example:
         select(anyHeavy(User.browser)).select_from(User)
     """
@@ -1141,46 +1164,47 @@ def any_heavy(expr: Any) -> FunctionCall:
 # Dictionary functions
 def dict_get(dict_name: str, attr_name: str, id_expr: Any) -> FunctionCall:
     """Get attribute value from dictionary.
-    
+
     Args:
         dict_name: Dictionary name
         attr_name: Attribute name to retrieve
         id_expr: Key expression
-        
+
     Example:
         select(dictGet('user_dict', 'name', User.id))
     """
     from chorm.sql.expression import Literal
+
     return func.dictGet(Literal(dict_name), Literal(attr_name), id_expr)
 
 
 def dict_get_or_default(dict_name: str, attr_name: str, id_expr: Any, default: Any) -> FunctionCall:
     """Get attribute value from dictionary with default.
-    
+
     Args:
         dict_name: Dictionary name
         attr_name: Attribute name to retrieve
         id_expr: Key expression
         default: Default value if key not found
-        
+
     Example:
         select(dictGetOrDefault('user_dict', 'name', User.id, 'Unknown'))
     """
     from chorm.sql.expression import Literal
+
     return func.dictGetOrDefault(Literal(dict_name), Literal(attr_name), id_expr, default)
 
 
 def dict_has(dict_name: str, id_expr: Any) -> FunctionCall:
     """Check if key exists in dictionary.
-    
+
     Args:
         dict_name: Dictionary name
         id_expr: Key expression
-        
+
     Example:
         select(User).where(dictHas('user_dict', User.id))
     """
     from chorm.sql.expression import Literal
+
     return func.dictHas(Literal(dict_name), id_expr)
-
-

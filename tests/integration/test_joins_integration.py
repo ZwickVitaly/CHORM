@@ -46,7 +46,7 @@ def engine():
     host = os.getenv("CLICKHOUSE_HOST", "localhost")
     port = int(os.getenv("CLICKHOUSE_PORT", "8123"))
     database = os.getenv("CLICKHOUSE_DB", "default")
-    
+
     engine = create_engine(
         host=host,
         port=port,
@@ -61,7 +61,7 @@ def engine():
 def setup_tables(engine):
     """Create test tables and insert data."""
     session = Session(engine)
-    
+
     # Drop tables if they exist
     try:
         session.execute(f"DROP TABLE IF EXISTS {User.__tablename__}")
@@ -69,12 +69,12 @@ def setup_tables(engine):
         session.execute(f"DROP TABLE IF EXISTS {Product.__tablename__}")
     except Exception:
         pass
-    
+
     # Create tables
     session.execute(User.create_table(exists_ok=True))
     session.execute(Order.create_table(exists_ok=True))
     session.execute(Product.create_table(exists_ok=True))
-    
+
     # Insert test data
     # Users
     users_data = [
@@ -84,7 +84,7 @@ def setup_tables(engine):
     ]
     for user in users_data:
         session.execute(insert(User).values(**user.to_dict()))
-    
+
     # Orders
     orders_data = [
         Order(id=1, user_id=1, product_id=1, amount=100, status="completed"),
@@ -94,7 +94,7 @@ def setup_tables(engine):
     ]
     for order in orders_data:
         session.execute(insert(Order).values(**order.to_dict()))
-    
+
     # Products
     products_data = [
         Product(id=1, name="Widget", price=50),
@@ -103,11 +103,11 @@ def setup_tables(engine):
     ]
     for product in products_data:
         session.execute(insert(Product).values(**product.to_dict()))
-    
+
     session.commit()
-    
+
     yield
-    
+
     # Cleanup
     try:
         session.execute(f"DROP TABLE IF EXISTS {User.__tablename__}")
@@ -121,19 +121,19 @@ def setup_tables(engine):
 def test_inner_join_integration(engine, setup_tables):
     """Test INNER JOIN with real ClickHouse."""
     session = Session(engine)
-    
+
     stmt = (
         select(User.name, Order.amount)
         .select_from(User)
         .join(Order, on=User.id == Order.user_id)
         .where(Order.status == "completed")
     )
-    
+
     result = session.execute(stmt).all()
-    
+
     # Should return 2 rows: Alice's 2 orders and Bob's 1 order with status='completed'
     assert len(result) == 2
-    
+
     # Verify data
     names = {row[0] for row in result}
     assert "Alice" in names
@@ -143,17 +143,13 @@ def test_inner_join_integration(engine, setup_tables):
 def test_left_join_integration(engine, setup_tables):
     """Test LEFT JOIN with real ClickHouse."""
     session = Session(engine)
-    
+
     # Left join will include all users even if they have no orders
     # But we inserted orders for all users, so should get same result as inner join
-    stmt = (
-        select(User.name, Order.amount)
-        .select_from(User)
-        .left_join(Order, on=User.id == Order.user_id)
-    )
-    
+    stmt = select(User.name, Order.amount).select_from(User).left_join(Order, on=User.id == Order.user_id)
+
     result = session.execute(stmt).all()
-    
+
     # Should return 4 rows (all orders)
     assert len(result) == 4
 
@@ -161,7 +157,7 @@ def test_left_join_integration(engine, setup_tables):
 def test_multiple_joins_integration(engine, setup_tables):
     """Test multiple JOINs with real ClickHouse."""
     session = Session(engine)
-    
+
     # Simplified to avoid ambiguous column names - selecting only from first two tables
     stmt = (
         select(User.name, Order.amount)
@@ -169,9 +165,9 @@ def test_multiple_joins_integration(engine, setup_tables):
         .join(Order, on=User.id == Order.user_id)
         .where(User.city == "Moscow")
     )
-    
+
     result = session.execute(stmt).all()
-    
+
     # Should return orders from users in Moscow (Alice and Charlie)
     # Alice has 2 orders, Charlie has 1 order = 3 total
     assert len(result) == 3
@@ -180,21 +176,21 @@ def test_multiple_joins_integration(engine, setup_tables):
 def test_join_with_aggregation(engine, setup_tables):
     """Test JOIN with GROUP BY and aggregation."""
     from chorm.sql.expression import func
-    
+
     session = Session(engine)
-    
+
     stmt = (
         select(User.name, func.count(Order.id).label("order_count"))
         .select_from(User)
         .join(Order, on=User.id == Order.user_id)
         .group_by(User.name)
     )
-    
+
     result = session.execute(stmt).all()
-    
+
     # Should return 3 rows (3 users)
     assert len(result) == 3
-    
+
     # Check order counts
     order_counts = {row[0]: int(row[1]) for row in result}
     assert order_counts["Alice"] == 2
@@ -205,12 +201,10 @@ def test_join_with_aggregation(engine, setup_tables):
 def test_cross_join_integration(engine, setup_tables):
     """Test CROSS JOIN with real ClickHouse."""
     session = Session(engine)
-    
+
     # Cross join of 3 users and 3 products = 9 rows
-    stmt = select(User.name, Product.name).select_from(User).cross_join(
-        Product
-    )
-    
+    stmt = select(User.name, Product.name).select_from(User).cross_join(Product)
+
     result = session.execute(stmt).all()
-    
+
     assert len(result) == 9  # 3 users × 3 products

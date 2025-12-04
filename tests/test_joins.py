@@ -39,9 +39,7 @@ class Product(Table):
 
 def test_inner_join():
     """Test INNER JOIN with ON condition."""
-    stmt = select(User.id, User.name, Order.amount).select_from(User).join(
-        Order, on=User.id == Order.user_id
-    )
+    stmt = select(User.id, User.name, Order.amount).select_from(User).join(Order, on=User.id == Order.user_id)
     sql = stmt.to_sql()
     assert "FROM users" in sql
     assert "INNER JOIN orders" in sql
@@ -82,7 +80,11 @@ def test_cross_join():
     assert "FROM users" in sql
     assert "CROSS JOIN orders" in sql
     # CROSS JOIN should not have ON or USING
-    assert "ON" not in sql.split("CROSS JOIN orders")[1].split("WHERE")[0] if "WHERE" in sql else "ON" not in sql.split("CROSS JOIN orders")[1]
+    assert (
+        "ON" not in sql.split("CROSS JOIN orders")[1].split("WHERE")[0]
+        if "WHERE" in sql
+        else "ON" not in sql.split("CROSS JOIN orders")[1]
+    )
 
 
 def test_join_using_clause():
@@ -110,9 +112,7 @@ def test_multiple_joins():
 
 def test_join_with_complex_conditions():
     """Test JOIN with complex AND/OR conditions."""
-    stmt = select(User).join(
-        Order, on=(User.id == Order.user_id) & (Order.status == "active")
-    )
+    stmt = select(User).join(Order, on=(User.id == Order.user_id) & (Order.status == "active"))
     sql = stmt.to_sql()
     assert "INNER JOIN orders" in sql
     assert "ON ((users.id = orders.user_id) AND (orders.status = 'active'))" in sql
@@ -120,9 +120,7 @@ def test_join_with_complex_conditions():
 
 def test_join_with_or_conditions():
     """Test JOIN with OR conditions."""
-    stmt = select(User).join(
-        Order, on=(User.id == Order.user_id) | (User.city == "Moscow")
-    )
+    stmt = select(User).join(Order, on=(User.id == Order.user_id) | (User.city == "Moscow"))
     sql = stmt.to_sql()
     assert "INNER JOIN orders" in sql
     assert "ON ((users.id = orders.user_id) OR (users.city = 'Moscow'))" in sql

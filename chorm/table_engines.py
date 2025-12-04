@@ -10,7 +10,6 @@ from chorm.exceptions import ConfigurationError
 EngineConfigurationError = ConfigurationError
 
 
-
 class TableEngine:
     """Base class for ClickHouse table engine descriptors."""
 
@@ -37,9 +36,7 @@ class TableEngine:
         if kwargs:
             unknown = set(kwargs) - set(self.arg_names)
             if unknown:
-                raise EngineConfigurationError(
-                    f"Unknown engine arguments {sorted(unknown)} for {self.engine_name}"
-                )
+                raise EngineConfigurationError(f"Unknown engine arguments {sorted(unknown)} for {self.engine_name}")
             for name in self.arg_names:
                 values.append(kwargs.get(name))
         else:
@@ -54,9 +51,7 @@ class TableEngine:
 
         for name, value in zip(self.arg_names, values):
             if name in self.required_args and value is None:
-                raise EngineConfigurationError(
-                    f"Argument '{name}' is required for engine {self.engine_name}"
-                )
+                raise EngineConfigurationError(f"Argument '{name}' is required for engine {self.engine_name}")
 
         return tuple(values)
 
@@ -64,18 +59,14 @@ class TableEngine:
         allowed = set(self.setting_names) | set(self.default_settings)
         unknown = set(settings) - allowed
         if unknown:
-            raise EngineConfigurationError(
-                f"Unknown settings {sorted(unknown)} for engine {self.engine_name}"
-            )
+            raise EngineConfigurationError(f"Unknown settings {sorted(unknown)} for engine {self.engine_name}")
 
         result = dict(self.default_settings)
         result.update(settings)
 
         for key in self.required_settings:
             if key not in result:
-                raise EngineConfigurationError(
-                    f"Setting '{key}' is required for engine {self.engine_name}"
-                )
+                raise EngineConfigurationError(f"Setting '{key}' is required for engine {self.engine_name}")
 
         return result
 
@@ -101,13 +92,11 @@ class TableEngine:
             clause = self.engine_name
 
         # Add TTL clause if present (only for MergeTree family usually, but handled generically here)
-        if hasattr(self, 'ttl') and self.ttl:
+        if hasattr(self, "ttl") and self.ttl:
             clause = f"{clause} TTL {self.ttl}"
 
         if self._settings:
-            settings_sql = ", ".join(
-                f"{key} = {self._format_setting(value)}" for key, value in self._settings.items()
-            )
+            settings_sql = ", ".join(f"{key} = {self._format_setting(value)}" for key, value in self._settings.items())
             clause = f"{clause} SETTINGS {settings_sql}"
 
         return clause
@@ -124,11 +113,10 @@ class TableEngine:
 # --- MergeTree family -----------------------------------------------------------
 
 
-
 class MergeTree(TableEngine):
     engine_name = "MergeTree"
     setting_names = ("index_granularity", "index_granularity_bytes", "enable_mixed_granularity_parts")
-    
+
     def __init__(self, *args, ttl: str | None = None, **kwargs):
         self.ttl = ttl
         super().__init__(*args, **kwargs)
@@ -138,7 +126,7 @@ class ReplacingMergeTree(TableEngine):
     engine_name = "ReplacingMergeTree"
     arg_names = ("version_column",)
     setting_names = ("index_granularity", "index_granularity_bytes", "enable_mixed_granularity_parts")
-    
+
     def __init__(self, *args, ttl: str | None = None, **kwargs):
         self.ttl = ttl
         super().__init__(*args, **kwargs)
@@ -148,7 +136,7 @@ class SummingMergeTree(TableEngine):
     engine_name = "SummingMergeTree"
     arg_names = ("columns",)
     setting_names = ("index_granularity", "index_granularity_bytes", "enable_mixed_granularity_parts")
-    
+
     def __init__(self, *args, ttl: str | None = None, **kwargs):
         self.ttl = ttl
         super().__init__(*args, **kwargs)
@@ -157,7 +145,7 @@ class SummingMergeTree(TableEngine):
 class AggregatingMergeTree(TableEngine):
     engine_name = "AggregatingMergeTree"
     setting_names = ("index_granularity", "index_granularity_bytes", "enable_mixed_granularity_parts")
-    
+
     def __init__(self, *args, ttl: str | None = None, **kwargs):
         self.ttl = ttl
         super().__init__(*args, **kwargs)
@@ -168,7 +156,7 @@ class CollapsingMergeTree(TableEngine):
     arg_names = ("sign_column",)
     required_args = ("sign_column",)
     setting_names = ("index_granularity", "index_granularity_bytes", "enable_mixed_granularity_parts")
-    
+
     def __init__(self, *args, ttl: str | None = None, **kwargs):
         self.ttl = ttl
         super().__init__(*args, **kwargs)
@@ -178,7 +166,7 @@ class VersionedCollapsingMergeTree(TableEngine):
     engine_name = "VersionedCollapsingMergeTree"
     arg_names = ("sign_column", "version_column")
     required_args = ("sign_column", "version_column")
-    
+
     def __init__(self, *args, ttl: str | None = None, **kwargs):
         self.ttl = ttl
         super().__init__(*args, **kwargs)
@@ -188,7 +176,7 @@ class GraphiteMergeTree(TableEngine):
     engine_name = "GraphiteMergeTree"
     arg_names = ("config_element",)
     required_args = ("config_element",)
-    
+
     def __init__(self, *args, ttl: str | None = None, **kwargs):
         self.ttl = ttl
         super().__init__(*args, **kwargs)
@@ -198,7 +186,7 @@ class ReplicatedMergeTree(TableEngine):
     engine_name = "ReplicatedMergeTree"
     arg_names = ("zookeeper_path", "replica_name")
     required_args = ("zookeeper_path", "replica_name")
-    
+
     def __init__(self, *args, ttl: str | None = None, **kwargs):
         self.ttl = ttl
         super().__init__(*args, **kwargs)
@@ -208,7 +196,7 @@ class ReplicatedReplacingMergeTree(TableEngine):
     engine_name = "ReplicatedReplacingMergeTree"
     arg_names = ("zookeeper_path", "replica_name", "version_column")
     required_args = ("zookeeper_path", "replica_name")
-    
+
     def __init__(self, *args, ttl: str | None = None, **kwargs):
         self.ttl = ttl
         super().__init__(*args, **kwargs)
@@ -218,7 +206,7 @@ class ReplicatedSummingMergeTree(TableEngine):
     engine_name = "ReplicatedSummingMergeTree"
     arg_names = ("zookeeper_path", "replica_name", "columns")
     required_args = ("zookeeper_path", "replica_name")
-    
+
     def __init__(self, *args, ttl: str | None = None, **kwargs):
         self.ttl = ttl
         super().__init__(*args, **kwargs)
@@ -228,7 +216,7 @@ class ReplicatedAggregatingMergeTree(TableEngine):
     engine_name = "ReplicatedAggregatingMergeTree"
     arg_names = ("zookeeper_path", "replica_name")
     required_args = ("zookeeper_path", "replica_name")
-    
+
     def __init__(self, *args, ttl: str | None = None, **kwargs):
         self.ttl = ttl
         super().__init__(*args, **kwargs)
@@ -238,7 +226,7 @@ class ReplicatedCollapsingMergeTree(TableEngine):
     engine_name = "ReplicatedCollapsingMergeTree"
     arg_names = ("zookeeper_path", "replica_name", "sign_column")
     required_args = ("zookeeper_path", "replica_name", "sign_column")
-    
+
     def __init__(self, *args, ttl: str | None = None, **kwargs):
         self.ttl = ttl
         super().__init__(*args, **kwargs)
@@ -248,7 +236,7 @@ class ReplicatedVersionedCollapsingMergeTree(TableEngine):
     engine_name = "ReplicatedVersionedCollapsingMergeTree"
     arg_names = ("zookeeper_path", "replica_name", "sign_column", "version_column")
     required_args = ("zookeeper_path", "replica_name", "sign_column", "version_column")
-    
+
     def __init__(self, *args, ttl: str | None = None, **kwargs):
         self.ttl = ttl
         super().__init__(*args, **kwargs)
@@ -258,11 +246,10 @@ class ReplicatedGraphiteMergeTree(TableEngine):
     engine_name = "ReplicatedGraphiteMergeTree"
     arg_names = ("zookeeper_path", "replica_name", "config_element")
     required_args = ("zookeeper_path", "replica_name", "config_element")
-    
+
     def __init__(self, *args, ttl: str | None = None, **kwargs):
         self.ttl = ttl
         super().__init__(*args, **kwargs)
-
 
 
 # --- Log engines ----------------------------------------------------------------

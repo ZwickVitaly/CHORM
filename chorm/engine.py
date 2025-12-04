@@ -14,10 +14,24 @@ if TYPE_CHECKING:
 _TRUE_VALUES = {"1", "true", "t", "yes", "y", "on"}
 _FALSE_VALUES = {"0", "false", "f", "no", "n", "off"}
 _CONFIG_KEYS = {
-    "host", "port", "username", "password", "database", "secure", "settings",
-    "connect_timeout", "send_receive_timeout", "compress", "verify", "client_name",
-    "ca_cert", "client_cert", "client_cert_key", "http_proxy", "https_proxy",
-    "query_limit"
+    "host",
+    "port",
+    "username",
+    "password",
+    "database",
+    "secure",
+    "settings",
+    "connect_timeout",
+    "send_receive_timeout",
+    "compress",
+    "verify",
+    "client_name",
+    "ca_cert",
+    "client_cert",
+    "client_cert_key",
+    "http_proxy",
+    "https_proxy",
+    "query_limit",
 }
 
 
@@ -50,7 +64,7 @@ def _coerce_bool(raw: str) -> bool:
 @dataclass
 class EngineConfig:
     """Static connection information for building ClickHouse clients.
-    
+
     Connection Parameters:
         host: ClickHouse server hostname (default: localhost)
         port: ClickHouse HTTP/HTTPS port (default: 8123)
@@ -59,25 +73,25 @@ class EngineConfig:
         database: Default database (default: default)
         secure: Use HTTPS/TLS (default: False)
         settings: ClickHouse server settings dict
-    
+
     Timeout Parameters:
         connect_timeout: HTTP connection timeout in seconds (default: 10)
         send_receive_timeout: HTTP read timeout in seconds (default: 300)
-    
+
     Performance Parameters:
         compress: Enable compression - True, False, or 'lz4'/'zstd'/'brotli'/'gzip' (default: False)
         query_limit: Default LIMIT on returned rows, 0 = no limit (default: 0)
-    
+
     Security Parameters:
         verify: Verify server certificate in HTTPS mode (default: True)
         ca_cert: Path to CA certificate in .pem format, or 'certifi' for certifi package
         client_cert: Path to client certificate in .pem format
         client_cert_key: Path to private key for client certificate
-    
+
     Proxy Parameters:
         http_proxy: HTTP proxy address
         https_proxy: HTTPS proxy address
-    
+
     Monitoring Parameters:
         client_name: Client name for query tracking in system.query_log
     """
@@ -90,25 +104,25 @@ class EngineConfig:
     database: str = "default"
     secure: bool = False
     settings: Dict[str, Any] = field(default_factory=dict)
-    
+
     # Timeout parameters (following clickhouse-connect defaults)
     connect_timeout: int = 10
     send_receive_timeout: int = 300
-    
+
     # Performance parameters
     compress: bool | str = False
     query_limit: int = 0
-    
+
     # Security parameters
     verify: bool = True
     ca_cert: str | None = None
     client_cert: str | None = None
     client_cert_key: str | None = None
-    
+
     # Proxy parameters
     http_proxy: str | None = None
     https_proxy: str | None = None
-    
+
     # Monitoring parameters
     client_name: str | None = None
 
@@ -179,7 +193,7 @@ class EngineConfig:
 
 class Engine:
     """Factory for `clickhouse_connect.driver.client.Client` instances.
-    
+
     Supports optional connection pooling for improved performance.
     """
 
@@ -190,28 +204,29 @@ class Engine:
         pool_size: int | None = None,
         max_overflow: int | None = None,
         pool_timeout: float | None = None,
-        pool_recycle: int | None = None
+        pool_recycle: int | None = None,
     ) -> None:
         self._config = config
         self._connect_args = dict(connect_args or {})
-        
+
         # Connection pooling (optional)
         self._pool = None
         if pool_size is not None:
             from chorm.pool import ConnectionPool
+
             self._pool = ConnectionPool(
                 config=config,
                 pool_size=pool_size,
                 max_overflow=max_overflow or 10,
                 timeout=pool_timeout or 30.0,
                 recycle=pool_recycle or 3600,
-                connect_args=self._connect_args
+                connect_args=self._connect_args,
             )
 
     @property
     def config(self) -> EngineConfig:
         return self._config
-    
+
     @property
     def pool(self):
         """Return the connection pool if pooling is enabled."""
@@ -219,7 +234,7 @@ class Engine:
 
     def connect(self, *, settings: Mapping[str, Any] | None = None, **overrides: Any) -> "Connection":
         """Get a connection from pool or create a new one.
-        
+
         If pooling is enabled, gets connection from pool.
         Otherwise, creates a new connection.
         """
@@ -230,29 +245,42 @@ class Engine:
             # Create new connection
             client = self._create_client(settings=settings, **overrides)
             return Connection(client)
-    
+
     def connection(self, *, settings: Mapping[str, Any] | None = None, **overrides: Any):
         """Context manager for automatic connection cleanup.
-        
+
         When pooling is enabled, automatically returns connection to pool.
         When pooling is disabled, closes the connection.
-        
+
         Example:
             >>> with engine.connection() as conn:
             ...     result = conn.query("SELECT 1")
             >>> # Connection automatically returned to pool or closed
         """
         from chorm._context_managers import _ConnectionContextManager
+
         return _ConnectionContextManager(self, settings=settings, **overrides)
 
-    def execute(self, sql: str, *, parameters: Mapping[str, Any] | Sequence[Any] | None = None,
-                settings: Mapping[str, Any] | None = None, **overrides: Any) -> Any:
+    def execute(
+        self,
+        sql: str,
+        *,
+        parameters: Mapping[str, Any] | Sequence[Any] | None = None,
+        settings: Mapping[str, Any] | None = None,
+        **overrides: Any,
+    ) -> Any:
         """Execute a command that does not return a result set."""
         with self.connect(settings=settings, **overrides) as connection:
             return connection.execute(sql, parameters=parameters, settings=settings)
 
-    def query(self, sql: str, *, parameters: Mapping[str, Any] | Sequence[Any] | None = None,
-              settings: Mapping[str, Any] | None = None, **overrides: Any) -> Any:
+    def query(
+        self,
+        sql: str,
+        *,
+        parameters: Mapping[str, Any] | Sequence[Any] | None = None,
+        settings: Mapping[str, Any] | None = None,
+        **overrides: Any,
+    ) -> Any:
         """Execute a query and return the ClickHouse result object."""
         with self.connect(settings=settings, **overrides) as connection:
             return connection.query(sql, parameters=parameters, settings=settings)
@@ -274,7 +302,7 @@ class Engine:
             # Security parameters
             "verify": self._config.verify,
         }
-        
+
         # Add optional parameters only if set
         if self._config.ca_cert is not None:
             client_kwargs["ca_cert"] = self._config.ca_cert
@@ -331,17 +359,35 @@ class Connection:
     def closed(self) -> bool:
         return self._closed
 
-    def query(self, sql: str, *, parameters: Mapping[str, Any] | Sequence[Any] | None = None,
-              settings: Mapping[str, Any] | None = None, **kwargs: Any) -> Any:
+    def query(
+        self,
+        sql: str,
+        *,
+        parameters: Mapping[str, Any] | Sequence[Any] | None = None,
+        settings: Mapping[str, Any] | None = None,
+        **kwargs: Any,
+    ) -> Any:
         return self._client.query(sql, parameters=parameters, settings=settings, **kwargs)
 
-    def execute(self, sql: str, *, parameters: Mapping[str, Any] | Sequence[Any] | None = None,
-                settings: Mapping[str, Any] | None = None, **kwargs: Any) -> Any:
+    def execute(
+        self,
+        sql: str,
+        *,
+        parameters: Mapping[str, Any] | Sequence[Any] | None = None,
+        settings: Mapping[str, Any] | None = None,
+        **kwargs: Any,
+    ) -> Any:
         return self._client.command(sql, parameters=parameters, settings=settings, **kwargs)
 
-    def insert(self, table: str, data: Iterable[Sequence[Any]] | Mapping[str, Sequence[Any]], *,
-               column_names: Sequence[str] | None = None, settings: Mapping[str, Any] | None = None,
-               **kwargs: Any) -> Any:
+    def insert(
+        self,
+        table: str,
+        data: Iterable[Sequence[Any]] | Mapping[str, Sequence[Any]],
+        *,
+        column_names: Sequence[str] | None = None,
+        settings: Mapping[str, Any] | None = None,
+        **kwargs: Any,
+    ) -> Any:
         return self._client.insert(
             table,
             data,
@@ -359,10 +405,10 @@ def create_engine(
     max_overflow: int | None = None,
     pool_timeout: float | None = None,
     pool_recycle: int | None = None,
-    **kwargs: Any
+    **kwargs: Any,
 ) -> Engine:
     """Create an `Engine` from an optional URL and keyword overrides.
-    
+
     Args:
         url: Optional connection URL
         connect_args: Additional connection arguments
@@ -371,14 +417,14 @@ def create_engine(
         pool_timeout: Connection acquisition timeout in seconds (default: 30.0)
         pool_recycle: Connection recycle time in seconds (default: 3600)
         **kwargs: Engine configuration and connection parameters
-    
+
     Returns:
         Engine instance with optional connection pooling
-    
+
     Example:
         >>> # Without pooling
         >>> engine = create_engine("clickhouse://localhost:8123/default")
-        >>> 
+        >>>
         >>> # With pooling
         >>> engine = create_engine(
         ...     "clickhouse://localhost:8123/default",
@@ -415,5 +461,5 @@ def create_engine(
         pool_size=pool_size,
         max_overflow=max_overflow,
         pool_timeout=pool_timeout,
-        pool_recycle=pool_recycle
+        pool_recycle=pool_recycle,
     )

@@ -52,6 +52,7 @@ def test_insert_from_select_no_columns():
 def test_insert_from_select_with_where():
     """Test INSERT FROM SELECT with WHERE clause."""
     from chorm.sql.expression import Literal, BinaryExpression
+
     condition = BinaryExpression(Identifier("active"), "=", Literal(1))
     source_query = select(Identifier("col1"), Identifier("col2")).select_from("source").where(condition)
     stmt = insert("target").from_select(source_query)

@@ -32,7 +32,7 @@ def test_union():
     query1 = select(User.name).where(User.city == "Moscow")
     query2 = select(User.name).where(User.city == "SPB")
     stmt = query1.union(query2)
-    
+
     sql = stmt.to_sql()
     assert "SELECT users.name FROM users WHERE (users.city = 'Moscow')" in sql
     assert "UNION" in sql
@@ -47,7 +47,7 @@ def test_union_all():
     query1 = select(User.name).where(User.city == "Moscow")
     query2 = select(User.name).where(User.city == "SPB")
     stmt = query1.union_all(query2)
-    
+
     sql = stmt.to_sql()
     assert "SELECT users.name FROM users WHERE (users.city = 'Moscow')" in sql
     assert "UNION ALL" in sql
@@ -59,9 +59,9 @@ def test_multiple_unions():
     query1 = select(User.id).where(User.city == "Moscow")
     query2 = select(User.id).where(User.city == "SPB")
     query3 = select(User.id).where(User.city == "Kazan")
-    
+
     stmt = query1.union(query2).union(query3)
-    
+
     sql = stmt.to_sql()
     assert sql.count("UNION") == 2
     assert "Moscow" in sql
@@ -74,9 +74,9 @@ def test_mixed_union_types():
     query1 = select(User.name).where(User.city == "Moscow")
     query2 = select(User.name).where(User.city == "SPB")
     query3 = select(User.name).where(User.city == "Kazan")
-    
+
     stmt = query1.union(query2).union_all(query3)
-    
+
     sql = stmt.to_sql()
     assert "UNION SELECT" in sql
     assert "UNION ALL SELECT" in sql
@@ -108,7 +108,7 @@ def test_union_with_order_by():
     query1 = select(User.name).where(User.city == "Moscow")
     query2 = select(User.name).where(User.city == "SPB")
     stmt = query1.union(query2).order_by(User.name.asc())
-    
+
     sql = stmt.to_sql()
     # Note: ORDER BY should only apply to the final result
     # The second query gets the ORDER BY
@@ -120,7 +120,7 @@ def test_union_with_limit():
     query1 = select(User.id).where(User.city == "Moscow")
     query2 = select(User.id).where(User.city == "SPB")
     stmt = query1.union(query2).limit(10)
-    
+
     sql = stmt.to_sql()
     assert "UNION" in sql
     # LIMIT should apply to the final result
@@ -132,7 +132,7 @@ def test_distinct_with_union():
     query1 = select(User.name).distinct().where(User.city == "Moscow")
     query2 = select(User.name).where(User.city == "SPB")
     stmt = query1.union(query2)
-    
+
     sql = stmt.to_sql()
     assert "SELECT DISTINCT users.name" in sql
     assert "UNION" in sql
