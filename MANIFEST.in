@@ -1,0 +1,39 @@
+# Include documentation and examples
+include README.md
+include LICENSE
+include CHANGELOG.md
+recursive-include docs *.md
+recursive-include examples *.py
+
+# Exclude development and build files
+exclude .gitignore
+exclude .python-version
+exclude docker-compose.yml
+exclude main.py
+exclude test_ddl.py
+exclude uv.lock
+recursive-exclude tests *
+recursive-exclude .git *
+recursive-exclude .pytest_cache *
+recursive-exclude __pycache__ *
+recursive-exclude *.egg-info *
+recursive-exclude .venv *
+recursive-exclude temp_migrate_test *
+recursive-exclude scripts *
+
+# Exclude markdown files in root (development docs)
+exclude BATCH_INSERT_ENHANCEMENT.md
+exclude COMPLETED_WORK.md
+exclude DISTRIBUTED_AND_EXTERNAL_ENGINES.md
+exclude EVENTS_HOOKS_ANALYSIS.md
+exclude FINAL_ORM_COMPLETENESS_REPORT.md
+exclude FINAL_SUMMARY.md
+exclude IMPLEMENTATION_PLAN.md
+exclude ORM_COMPLETENESS_ANALYSIS.md
+exclude PROGRESS_SUMMARY.md
+exclude PROJECT_COMPLETE_SUMMARY.md
+exclude QUERY_OPTIMIZATION_COMPLETE.md
+exclude SPRINT_11_COMPLETE.md
+exclude SPRINT_11_FINAL_REPORT.md
+exclude SPRINT_11_PHASE_1_SUMMARY.md
+exclude SPRINT_11_PHASE_2_SUMMARY.md

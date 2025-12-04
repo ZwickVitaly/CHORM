@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+
+# Environment
+.env
+.env.example
+.venv/
+venv/
+
+# Lock files (development only)
+uv.lock
+
+# Development documentation
+IMPLEMENTATION_PLAN.md
+
+# Development infrastructure
+docker-compose.yml
+
+# Development test files
+main.py
+test_ddl.py
+temp_migrate_test/
+
+# Development scripts
+scripts/
+
+# IDE
+.vscode/
+.idea/

@@ -1,0 +1,227 @@
+"""DML statement construction (Insert, Update, Delete)."""
+
+from __future__ import annotations
+
+from typing import Any, Dict, List, Optional, Sequence, Union
+
+from chorm.sql.expression import Expression, _coerce
+
+
+class Insert(Expression):
+    """Represents an INSERT statement."""
+
+    def __init__(self, table: Any) -> None:
+        self.table = table
+        self.values_list: List[Dict[str, Any]] = []
+        self._select_query: Optional[Expression] = None
+        self._columns: Optional[List[str]] = None
+        self._settings: Dict[str, Any] = {}
+
+    def values(self, *args: Any, **kwargs: Any) -> Insert:
+        """Add values to insert."""
+        if args:
+            if len(args) == 1 and isinstance(args[0], (list, tuple)):
+                # Bulk insert: list of dicts
+                self.values_list.extend(args[0])
+            elif len(args) == 1 and isinstance(args[0], dict):
+                self.values_list.append(args[0])
+        if kwargs:
+            self.values_list.append(kwargs)
+        return self
+    
+    def from_select(self, select_query: Any, columns: Optional[List[str]] = None) -> Insert:
+        """Insert from SELECT query.
+        
+        Args:
+            select_query: SELECT statement to insert from
+            columns: Optional list of column names to insert into
+            
+        Example:
+            insert(TargetTable).from_select(
+                select(SourceTable.col1, SourceTable.col2).where(SourceTable.active == 1),
+                columns=['col1', 'col2']
+            )
+        """
+        self._select_query = select_query
+        self._columns = columns
+        return self
+    
+    def settings(self, **kwargs: Any) -> Insert:
+        """Add SETTINGS clause."""
+        self._settings.update(kwargs)
+        return self
+
+    def to_sql(self) -> str:
+        """Render the INSERT statement to SQL.
+        
+        Note: This is mostly for debugging or small inserts. 
+        ClickHouse client prefers separate data transmission.
+        """
+        table_name = self.table.__tablename__ if hasattr(self.table, "__tablename__") else str(self.table)
+        
+        # INSERT FROM SELECT
+        if self._select_query is not None:
+            sql = f"INSERT INTO {table_name}"
+            if self._columns:
+                columns_str = ", ".join(self._columns)
+                sql += f" ({columns_str})"
+            
+            query_sql = self._select_query.to_sql() if hasattr(self._select_query, "to_sql") else str(self._select_query)
+            sql += f" {query_sql}"
+            
+            if self._settings:
+                settings_list = []
+                for k, v in self._settings.items():
+                    val_str = str(v)
+                    if isinstance(v, str):
+                        val_str = f"'{v}'"
+                    settings_list.append(f"{k}={val_str}")
+                sql += f" SETTINGS {', '.join(settings_list)}"
+            
+            return sql
+        
+        # Regular INSERT with VALUES
+        if not self.values_list:
+             return f"INSERT INTO {table_name} FORMAT Values"
+
+        # Naive implementation for single batch
+        # Assuming all dicts have same keys
+        keys = list(self.values_list[0].keys())
+        columns = ", ".join(keys)
+        
+        values_str_list = []
+        for row in self.values_list:
+            row_vals = []
+            for k in keys:
+                val = row.get(k)
+                # Basic escaping
+                if isinstance(val, str):
+                    row_vals.append(f"'{val}'")
+                elif val is None:
+                    row_vals.append("NULL")
+                else:
+                    row_vals.append(str(val))
+            values_str_list.append(f"({', '.join(row_vals)})")
+            
+        values_clause = ", ".join(values_str_list)
+        
+        sql = f"INSERT INTO {table_name} ({columns}) VALUES {values_clause}"
+        
+        if self._settings:
+            settings_list = []
+            for k, v in self._settings.items():
+                val_str = str(v)
+                if isinstance(v, str):
+                    val_str = f"'{v}'"
+                settings_list.append(f"{k}={val_str}")
+            sql += f" SETTINGS {', '.join(settings_list)}"
+            
+        return sql
+
+
+class Update(Expression):
+    """Represents an ALTER TABLE ... UPDATE statement."""
+
+    def __init__(self, table: Any) -> None:
+        self.table = table
+        self._where_criteria: List[Expression] = []
+        self._values: Dict[str, Any] = {}
+        self._settings: Dict[str, Any] = {}
+
+    def where(self, *criteria: Any) -> Update:
+        """Add WHERE criteria."""
+        for criterion in criteria:
+            self._where_criteria.append(_coerce(criterion))
+        return self
+
+    def values(self, **kwargs: Any) -> Update:
+        """Set values to update."""
+        self._values.update(kwargs)
+        return self
+    
+    def settings(self, **kwargs: Any) -> Update:
+        """Add SETTINGS clause."""
+        self._settings.update(kwargs)
+        return self
+
+    def to_sql(self) -> str:
+        """Render the UPDATE statement to SQL."""
+        table_name = self.table.__tablename__ if hasattr(self.table, "__tablename__") else str(self.table)
+        
+        assignments = []
+        for k, v in self._values.items():
+            val_expr = _coerce(v)
+            assignments.append(f"{k} = {val_expr.to_sql()}")
+        
+        assignment_clause = ", ".join(assignments)
+        
+        sql = f"ALTER TABLE {table_name} UPDATE {assignment_clause}"
+        
+        if self._where_criteria:
+            criteria = " AND ".join(c.to_sql() for c in self._where_criteria)
+            sql += f" WHERE {criteria}"
+        else:
+             # ClickHouse requires WHERE for mutations usually, but we won't enforce it here strictly
+             pass
+
+        if self._settings:
+            settings_list = []
+            for k, v in self._settings.items():
+                val_str = str(v)
+                if isinstance(v, str):
+                    val_str = f"'{v}'"
+                settings_list.append(f"{k}={val_str}")
+            sql += f" SETTINGS {', '.join(settings_list)}"
+
+        return sql
+
+
+class Delete(Expression):
+    """Represents an ALTER TABLE ... DELETE statement."""
+
+    def __init__(self, table: Any) -> None:
+        self.table = table
+        self._where_criteria: List[Expression] = []
+        self._settings: Dict[str, Any] = {}
+
+    def where(self, *criteria: Any) -> Delete:
+        """Add WHERE criteria."""
+        for criterion in criteria:
+            self._where_criteria.append(_coerce(criterion))
+        return self
+    
+    def settings(self, **kwargs: Any) -> Delete:
+        """Add SETTINGS clause."""
+        self._settings.update(kwargs)
+        return self
+
+    def to_sql(self) -> str:
+        """Render the DELETE statement to SQL."""
+        table_name = self.table.__tablename__ if hasattr(self.table, "__tablename__") else str(self.table)
+        
+        sql = f"ALTER TABLE {table_name} DELETE"
+        
+        if self._where_criteria:
+            criteria = " AND ".join(c.to_sql() for c in self._where_criteria)
+            sql += f" WHERE {criteria}"
+        
+        if self._settings:
+            settings_list = []
+            for k, v in self._settings.items():
+                val_str = str(v)
+                if isinstance(v, str):
+                    val_str = f"'{v}'"
+                settings_list.append(f"{k}={val_str}")
+            sql += f" SETTINGS {', '.join(settings_list)}"
+
+        return sql
+
+
+def insert(table: Any) -> Insert:
+    return Insert(table)
+
+def update(table: Any) -> Update:
+    return Update(table)
+
+def delete(table: Any) -> Delete:
+    return Delete(table)
