@@ -1,0 +1,11 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 💬 Question or Discussion
+    url: https://github.com/zwickvitaly/chorm/discussions
+    about: Ask questions and discuss ideas with the community
+  - name: 📖 Documentation
+    url: https://github.com/zwickvitaly/chorm#readme
+    about: Read the official CHORM documentation
+  - name: 🔒 Security Vulnerability
+    url: https://github.com/zwickvitaly/chorm/security/advisories/new
+    about: Report a security vulnerability privately

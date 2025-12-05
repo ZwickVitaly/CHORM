@@ -160,7 +160,9 @@ class Update(Expression):
         sql = f"ALTER TABLE {table_name} UPDATE {assignment_clause}"
 
         if self._where_criteria:
-            criteria = " AND ".join(c.to_sql() for c in self._where_criteria)
+            # ClickHouse ALTER TABLE UPDATE doesn't support table-qualified column names
+            # Strip table prefix from WHERE clause
+            criteria = " AND ".join(self._strip_table_prefix(c.to_sql(), table_name) for c in self._where_criteria)
             sql += f" WHERE {criteria}"
         else:
             # ClickHouse requires WHERE for mutations usually, but we won't enforce it here strictly
@@ -176,6 +178,19 @@ class Update(Expression):
             sql += f" SETTINGS {', '.join(settings_list)}"
 
         return sql
+    
+    @staticmethod
+    def _strip_table_prefix(sql: str, table_name: str) -> str:
+        """Strip table prefix from column references in SQL.
+        
+        ClickHouse ALTER TABLE UPDATE/DELETE don't support table-qualified column names.
+        Converts 'table.column' to 'column' in WHERE clauses.
+        """
+        import re
+        # Replace table.column with just column
+        # Pattern: table_name.column_name (with word boundaries)
+        pattern = rf'\b{re.escape(table_name)}\.(\w+)\b'
+        return re.sub(pattern, r'\1', sql)
 
 
 class Delete(Expression):
@@ -204,7 +219,9 @@ class Delete(Expression):
         sql = f"ALTER TABLE {table_name} DELETE"
 
         if self._where_criteria:
-            criteria = " AND ".join(c.to_sql() for c in self._where_criteria)
+            # ClickHouse ALTER TABLE DELETE doesn't support table-qualified column names
+            # Strip table prefix from WHERE clause (reuse Update's method)
+            criteria = " AND ".join(Update._strip_table_prefix(c.to_sql(), table_name) for c in self._where_criteria)
             sql += f" WHERE {criteria}"
 
         if self._settings:

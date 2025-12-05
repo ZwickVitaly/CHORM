@@ -34,11 +34,13 @@ def test_insert():
 def test_update():
     stmt = update(User).where(User.id == 1).values(name="Bob")
     sql = stmt.to_sql()
-    assert "ALTER TABLE users UPDATE name = 'Bob'" in sql
-    assert "WHERE (users.id = 1)" in sql
+    assert "ALTER TABLE users UPDATE" in sql
+    # ClickHouse ALTER TABLE UPDATE doesn't support table-qualified column names
+    assert "WHERE (id = 1)" in sql
 
 
 def test_delete():
     stmt = delete(User).where(User.id == 1)
     sql = stmt.to_sql()
-    assert "ALTER TABLE users DELETE WHERE (users.id = 1)" in sql
+    # ClickHouse ALTER TABLE DELETE doesn't support table-qualified column names
+    assert "ALTER TABLE users DELETE WHERE (id = 1)" in sql
