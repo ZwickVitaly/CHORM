@@ -116,7 +116,7 @@ jobs:
         uses: pypa/gh-action-pypi-publish@release/v1
         # Option 1: Trusted Publishing (recommended, no secrets needed)
         # Configure in PyPI: Account Settings → Manage → Add pending publisher
-        # Repository: zwickvitaly/chorm
+        # Repository: ZwickVitaly/CHORM (exact case-sensitive match required!)
         # Workflow file: .github/workflows/publish.yml
         
         # Option 2: Use API token (if Trusted Publishing not configured)

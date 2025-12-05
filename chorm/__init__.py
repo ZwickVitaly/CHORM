@@ -1,6 +1,6 @@
 """Public interface for the CHORM package."""
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 from chorm.async_engine import AsyncConnection, AsyncEngine, create_async_engine
 from chorm.async_pool import AsyncConnectionPool
