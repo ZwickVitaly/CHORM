@@ -36,6 +36,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install pytest pytest-asyncio clickhouse-connect pandas
       
+      - name: Install package in development mode
+        run: |
+          pip install -e .
+      
       - name: Run tests
         run: |
           pytest tests/ -v --tb=short
