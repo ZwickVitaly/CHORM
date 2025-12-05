@@ -79,6 +79,19 @@ def engine_distributed():
 @pytest.fixture(scope="module")
 def setup_cluster_and_tables(engine, engine_distributed):
     """Set up cluster configuration and create tables on both instances."""
+    # Check if second ClickHouse instance is available first - before creating sessions
+    # Use socket check first to avoid connection errors during client creation
+    import socket
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(1)
+        result = sock.connect_ex((engine_distributed.config.host, engine_distributed.config.port))
+        sock.close()
+        if result != 0:
+            pytest.skip(f"Second ClickHouse instance is not available (port {engine_distributed.config.port}): connection refused. Skipping Distributed table tests.")
+    except Exception:
+        pytest.skip(f"Second ClickHouse instance is not available (port {engine_distributed.config.port}). Skipping Distributed table tests.")
+    
     session1 = Session(engine)
     session2 = Session(engine_distributed)
 

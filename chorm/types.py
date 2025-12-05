@@ -559,15 +559,15 @@ class AggregateFunctionType(FieldType):
         from chorm.types import AggregateFunction, UInt64
         
         # Using function from func namespace
-        AggregateFunction(func.sum, (UInt64(),))
-        AggregateFunction(func.uniq, (UInt64(),))
-        AggregateFunction(func.quantile(0.5), (UInt64(),))
+        AggregateFunction(func.sum, UInt64())
+        AggregateFunction(func.uniq, UInt64())
+        AggregateFunction(func.quantile(0.5), UInt64())
         
         # Or using string (for parse_type compatibility)
-        AggregateFunction("sum", (UInt64(),))
+        AggregateFunction("sum", UInt64())
     """
     
-    def __init__(self, func_or_name: Any, arg_types: Tuple[FieldType, ...]) -> None:
+    def __init__(self, func_or_name: Any, *arg_types: FieldType) -> None:
         """Initialize AggregateFunction type.
         
         Args:
@@ -576,7 +576,7 @@ class AggregateFunctionType(FieldType):
                   Note: Use dummy argument for functions with parameters, only parameter values matter
                 - _FunctionFactory from func (e.g., func.sum) - will extract just the name
                 - String with function name (e.g., 'sum', 'quantiles(0.5, 0.9)')
-            arg_types: Tuple of argument types for the aggregate function
+            *arg_types: Variable number of argument types for the aggregate function
         """
         # Extract function name from FunctionCall, _FunctionFactory, or use string directly
         from chorm.sql.expression import FunctionCall, Literal
@@ -622,12 +622,16 @@ class AggregateFunctionType(FieldType):
                     f"or function from func namespace, got {type(func_or_name).__name__}: {func_or_name!r}"
                 )
         
+        # Handle backward compatibility: if only one tuple is passed, unpack it
+        if len(arg_types) == 1 and isinstance(arg_types[0], tuple):
+            arg_types = arg_types[0]
+        
         # Build type string: AggregateFunction(func_name, type1, type2, ...)
         arg_types_str = ", ".join(arg_type.ch_type for arg_type in arg_types)
         ch_type = f"AggregateFunction({func_name}, {arg_types_str})" if arg_types else f"AggregateFunction({func_name})"
         super().__init__(ch_type)
         self.func_name = func_name
-        self.arg_types = arg_types
+        self.arg_types = tuple(arg_types)  # Store as tuple for backward compatibility
     
     def to_python(self, value: Any, *, context: ConversionContext | None = None) -> bytes | None:
         """Convert AggregateFunction state to Python representation.
@@ -835,10 +839,10 @@ def parse_type(type_spec: str) -> FieldType:
         
         # First argument is function name (may include parameters like quantiles(0.5, 0.9))
         func_name = args[0]
-        # Remaining arguments are argument types
-        arg_types = tuple(parse_type(arg) for arg in args[1:]) if len(args) > 1 else ()
+        # Remaining arguments are argument types - unpack as *arg_types
+        arg_types = [parse_type(arg) for arg in args[1:]] if len(args) > 1 else []
         
-        return AggregateFunctionType(func_name, arg_types)
+        return AggregateFunctionType(func_name, *arg_types)
 
     raise ConversionError(f"Unsupported ClickHouse type '{name}'")
 

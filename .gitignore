@@ -32,6 +32,10 @@ temp_migrate_test/
 # Development scripts
 scripts/
 
+# E2E test scripts (local development only)
+test_e2e.py
+test_tables.py
+
 # IDE
 .vscode/
 .idea/

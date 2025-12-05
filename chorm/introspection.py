@@ -42,6 +42,9 @@ class TableIntrospector:
             raise ValueError(f"Table {table} not found in database {database}")
 
         row = result.result_rows[0]
+        
+        # Get columns - this can return empty list if table is Distributed or has no columns
+        columns = self.get_columns(table, database)
 
         return {
             "name": table,
@@ -50,7 +53,7 @@ class TableIntrospector:
             "partition_key": row[2],
             "sorting_key": row[3],
             "primary_key": row[4],
-            "columns": self.get_columns(table, database),
+            "columns": columns,
         }
 
     def get_columns(self, table: str, database: str = "default") -> List[Dict[str, Any]]:
@@ -117,9 +120,16 @@ class ModelGenerator:
     def __init__(self):
         """Initialize model generator."""
         self.imports = set()
+        self.engines_used = set()  # Track which engines are used
 
     def map_type(self, ch_type: str) -> str:
         """Map ClickHouse type to CHORM type."""
+        if not ch_type:
+            return "String()  # TODO: Empty type"
+        
+        # Normalize whitespace
+        ch_type = ch_type.strip()
+        
         # Handle Nullable
         if ch_type.startswith("Nullable("):
             inner = ch_type[9:-1]
@@ -241,9 +251,9 @@ class ModelGenerator:
             # Build AggregateFunction call using func namespace
             if mapped_arg_types:
                 arg_types_str = ", ".join(mapped_arg_types)
-                return f'AggregateFunction({func_expr}, ({arg_types_str}))'
+                return f'AggregateFunction({func_expr}, {arg_types_str})'
             else:
-                return f'AggregateFunction({func_expr}, ())'
+                return f'AggregateFunction({func_expr})'
 
         # Simple types
         base_type = ch_type.split("(")[0]
@@ -273,8 +283,11 @@ class ModelGenerator:
             lines.append(f"    __order_by__ = {order_by}")
 
         # PARTITION BY
-        if table_info["partition_key"]:
-            lines.append(f"    __partition_by__ = '{table_info['partition_key']}'")
+        partition_key = table_info.get("partition_key")
+        if partition_key and isinstance(partition_key, str) and partition_key.strip():
+            # Escape single quotes in partition_key
+            safe_partition_key = partition_key.replace("'", "\\'")
+            lines.append(f"    __partition_by__ = '{safe_partition_key}'")
 
         lines.append("")
 
@@ -321,14 +334,28 @@ class ModelGenerator:
             engine: Engine name (e.g., "Distributed", "MergeTree")
             engine_full: Full engine definition with parameters (e.g., "Distributed(cluster, database, table)")
         """
-        if engine == "Distributed":
-            return self._map_distributed_engine(engine_full or engine)
-        elif "MergeTree" in engine:
+        # Check for Distributed engine
+        if engine and engine.strip() == "Distributed":
+            self.engines_used.add("Distributed")
+            if engine_full:
+                return self._map_distributed_engine(engine_full)
+            else:
+                return "Distributed(cluster='...', database='...', table='...')  # TODO: engine_full missing"
+        elif engine_full and engine_full.strip().startswith("Distributed("):
+            # Fallback: check engine_full if engine field is inconsistent
+            self.engines_used.add("Distributed")
+            return self._map_distributed_engine(engine_full)
+        elif engine and "MergeTree" in engine:
             if "Replacing" in engine:
+                self.engines_used.add("ReplacingMergeTree")
+                if engine_full and engine_full.strip().startswith("ReplacingMergeTree("):
+                    return self._map_replacing_mergetree_engine(engine_full)
                 return "ReplacingMergeTree()"
             elif "Summing" in engine:
+                self.engines_used.add("SummingMergeTree")
                 return "SummingMergeTree()"
             elif "Aggregating" in engine:
+                self.engines_used.add("AggregatingMergeTree")
                 return "AggregatingMergeTree()"
             elif "Collapsing" in engine:
                 return "CollapsingMergeTree()"
@@ -387,6 +414,68 @@ class ModelGenerator:
         
         return f"Distributed({', '.join(params)})"
     
+    def _map_replacing_mergetree_engine(self, engine_full: str) -> str:
+        """Parse ReplacingMergeTree engine_full and generate CHORM ReplacingMergeTree() call.
+        
+        Syntax: ReplacingMergeTree([version_column])
+        
+        ReplacingMergeTree can have only one optional parameter - version_column.
+        
+        Examples:
+            "ReplacingMergeTree()" -> ReplacingMergeTree()
+            "ReplacingMergeTree(version)" -> ReplacingMergeTree(version_column="version")
+            
+        Note: engine_full may contain additional text after the engine definition
+        (like ORDER BY, SETTINGS), so we need to extract only the engine part.
+        """
+        if not engine_full:
+            return "ReplacingMergeTree()"
+        
+        engine_full = engine_full.strip()
+        
+        # Check if it starts with ReplacingMergeTree(
+        if not engine_full.startswith("ReplacingMergeTree("):
+            return "ReplacingMergeTree()"
+        
+        # Find the matching closing parenthesis for the engine definition
+        # Need to handle nested parentheses if any, but ReplacingMergeTree has only one parameter
+        start_idx = len("ReplacingMergeTree(")
+        depth = 1
+        end_idx = start_idx
+        
+        for i in range(start_idx, len(engine_full)):
+            if engine_full[i] == '(':
+                depth += 1
+            elif engine_full[i] == ')':
+                depth -= 1
+                if depth == 0:
+                    end_idx = i
+                    break
+        
+        # Extract content inside parentheses
+        inner = engine_full[start_idx:end_idx].strip()
+        
+        # If empty, no version column
+        if not inner:
+            return "ReplacingMergeTree()"
+        
+        # Parse version column name (should be a single column name)
+        # Remove quotes if present, and take only the first part (before any spaces/comma)
+        version_column = inner.strip().strip("'\"").strip()
+        
+        # Split by space or comma to get only the column name (ignore ORDER BY, SETTINGS, etc.)
+        if ' ' in version_column:
+            version_column = version_column.split()[0]
+        if ',' in version_column:
+            version_column = version_column.split(',')[0]
+        
+        version_column = version_column.strip().strip("'\"")
+        
+        if version_column:
+            return f'ReplacingMergeTree(version_column="{version_column}")'
+        
+        return "ReplacingMergeTree()"
+    
     def _parse_distributed_args(self, inner: str) -> List[str]:
         """Parse arguments from Distributed engine definition.
         
@@ -433,21 +522,37 @@ class ModelGenerator:
         return args
     
     def _quote_arg(self, arg: str) -> str:
-        """Quote argument if it's a string literal, otherwise return as-is."""
+        """Quote argument if it's a string literal, otherwise return as-is.
+        
+        Handles quoted strings from ClickHouse by removing quotes and re-quoting
+        with repr() for proper Python string formatting.
+        """
         arg = arg.strip()
-        # If already quoted, return as-is
-        if (arg.startswith("'") and arg.endswith("'")) or (arg.startswith('"') and arg.endswith('"')):
-            return arg
+        # If already quoted, extract the inner value and re-quote with repr()
+        if arg.startswith("'") and arg.endswith("'"):
+            # Extract inner string and re-quote
+            inner = arg[1:-1]
+            return repr(inner)
+        elif arg.startswith('"') and arg.endswith('"'):
+            # Extract inner string and re-quote
+            inner = arg[1:-1]
+            return repr(inner)
         # Otherwise, quote it
         return repr(arg)
     
     def _format_sharding_key(self, key: str) -> str:
-        """Format sharding key - keep expressions as-is, quote identifiers."""
+        """Format sharding key - keep SQL expression as-is (always a string).
+        
+        sharding_key can be:
+        - Column name: id
+        - Function without params: rand()
+        - Function with params: cityHash64(id), hash(id), intHash32(user_id)
+        - Complex expression: (id + user_id) % 10
+        
+        Always return as Python string literal (quoted).
+        """
         key = key.strip()
-        # If it's a function call or expression, don't quote
-        if '(' in key or key in ('rand()', 'random()'):
-            return key
-        # Otherwise quote as string
+        # sharding_key is always a SQL expression, so keep it as a string
         return repr(key)
 
     def _parse_key_expression(self, expr: str) -> str:
@@ -505,6 +610,8 @@ class ModelGenerator:
                 "minIf": "minIf",
                 "maxIf": "maxIf",
                 "uniqIf": "uniqIf",
+                "groupUniqArray": "groupUniqArray",  # AggregateFunction support
+                "countDistinct": "countDistinct",  # AggregateFunction support
             }
             
             mapped_name = func_map.get(func_name, func_name)
@@ -524,8 +631,18 @@ class ModelGenerator:
         if "func" in self.imports:
             lines.append("from chorm.sql.expression import func")
 
-        # Engine imports
-        lines.append("from chorm.table_engines import MergeTree, ReplacingMergeTree, SummingMergeTree, AggregatingMergeTree")
+        # Engine imports - collect from used engines
+        engine_list = ["MergeTree"]  # Always include MergeTree
+        if "Distributed" in self.engines_used:
+            engine_list.append("Distributed")
+        if "ReplacingMergeTree" in self.engines_used:
+            engine_list.append("ReplacingMergeTree")
+        if "SummingMergeTree" in self.engines_used:
+            engine_list.append("SummingMergeTree")
+        if "AggregatingMergeTree" in self.engines_used:
+            engine_list.append("AggregatingMergeTree")
+        
+        lines.append(f"from chorm.table_engines import {', '.join(sorted(set(engine_list)))}")
 
         return "\n".join(lines)
 

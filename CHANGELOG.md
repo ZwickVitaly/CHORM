@@ -5,6 +5,28 @@ All notable changes to CHORM will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.3] - 2025-12-06
+
+### Changed
+- `AggregateFunctionType` constructor now accepts `*arg_types` instead of tuple (backward compatible)
+- Optimized import generation in table introspection (only imports used engines)
+- Improved introspection handling for empty types and whitespace normalization
+
+### Fixed
+- Fixed `AggregateFunction` generation in introspection (removed unnecessary parentheses in argument types)
+- Fixed handling of empty type strings in table introspection
+- Fixed `partition_key` generation with proper quote escaping in introspection
+- Fixed Distributed table introspection to handle cases when `engine_full` is missing
+- Fixed handling of AggregateFunction columns with no argument types
+
+### Added
+- Support for `ReplacingMergeTree` with version column in table introspection
+- Support for `groupUniqArray` and `countDistinct` aggregate functions in introspection
+- Comprehensive integration tests for table introspection (`test_introspection_integration.py`)
+
+### Testing
+- Added integration tests for table introspection with MergeTree, AggregatingMergeTree, and Distributed engines
+
 ## [0.1.2] - 2025-12-05
 
 ### Added
@@ -130,6 +152,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 60 integration tests with live ClickHouse
 - Full test coverage for all major features
 
+[0.1.3]: https://github.com/zwickvitaly/chorm/releases/tag/v0.1.3
 [0.1.2]: https://github.com/zwickvitaly/chorm/releases/tag/v0.1.2
 [0.1.1]: https://github.com/zwickvitaly/chorm/releases/tag/v0.1.1
 [0.1.0]: https://github.com/zwickvitaly/chorm/releases/tag/v0.1.0
