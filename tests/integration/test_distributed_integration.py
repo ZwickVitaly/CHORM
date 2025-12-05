@@ -83,6 +83,16 @@ def setup_cluster_and_tables(engine, engine_distributed):
     session2 = Session(engine_distributed)
 
     try:
+        # Check if cluster is configured
+        try:
+            cluster_check = session1.execute(
+                "SELECT count() FROM system.clusters WHERE cluster = 'test_cluster'"
+            ).scalar()
+            if cluster_check == 0:
+                pytest.skip("Cluster 'test_cluster' is not configured. Skipping Distributed table tests.")
+        except Exception as e:
+            pytest.skip(f"Failed to check cluster configuration: {e}. Skipping Distributed table tests.")
+
         # Drop tables if they exist
         session1.execute(f"DROP TABLE IF EXISTS {DistributedUsers.__tablename__}")
         session1.execute(f"DROP TABLE IF EXISTS {LocalUsers.__tablename__}")
@@ -101,8 +111,14 @@ def setup_cluster_and_tables(engine, engine_distributed):
         session2.commit()
 
         # Create Distributed table on first instance
-        session1.execute(DistributedUsers.create_table(exists_ok=True))
-        session1.commit()
+        try:
+            session1.execute(DistributedUsers.create_table(exists_ok=True))
+            session1.commit()
+        except Exception as e:
+            error_msg = str(e)
+            if "CLUSTER_DOESNT_EXIST" in error_msg or "cluster" in error_msg.lower():
+                pytest.skip(f"Cluster 'test_cluster' is not configured: {e}. Skipping Distributed table tests.")
+            raise
 
         yield
 

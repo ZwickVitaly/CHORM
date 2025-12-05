@@ -32,6 +32,11 @@ jobs:
             sleep 2
           done
           docker compose -f .github/docker-compose.yml ps
+          echo ""
+          echo "Checking cluster configuration..."
+          sleep 5
+          docker exec chorm_clickhouse clickhouse-client --query="SELECT * FROM system.clusters WHERE cluster = 'test_cluster'" || echo "Cluster not found yet"
+          docker exec chorm_clickhouse_distributed clickhouse-client --query="SELECT * FROM system.clusters WHERE cluster = 'test_cluster'" || echo "Cluster not found yet"
       
       - name: Install dependencies
         run: |
