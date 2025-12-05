@@ -5,6 +5,51 @@ All notable changes to CHORM will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.2] - 2025-12-05
+
+### Added
+
+#### Distributed Tables Support
+- Full support for `Distributed` table engine
+- Configuration via `Distributed(cluster, database, table, sharding_key, policy_name)`
+- Support for sharding key expressions (e.g., `rand()`, column-based sharding)
+- Support for storage policy parameter
+- DDL generation with proper syntax for Distributed tables
+- Table introspection support for Distributed tables
+- Integration tests for Distributed table operations (INSERT, SELECT, CREATE)
+
+#### AggregateFunction Support
+- Full support for `AggregateFunction` data type
+- Support for all aggregate function combinators:
+  - State combinators: `sumState`, `avgState`, `countState`, `uniqState`, `uniqExactState`, `minState`, `maxState`
+  - Merge combinators: `sumMerge`, `avgMerge`, `countMerge`, `uniqMerge`, `uniqExactMerge`, `minMerge`, `maxMerge`
+  - Conditional combinators: `sumIfState`, `avgIfState`, `countIfState`, `minIfState`, `maxIfState`, `uniqIfState`, and their `Merge` counterparts
+- Parameterized function support for `quantile` and `quantiles`:
+  - `quantileState(level)(value)` syntax via `ParameterizedFunctionCall`
+  - `quantileMerge(level)(state)` syntax
+  - `quantilesState(levels)(value)` and `quantilesMerge(levels)(state)` for multiple quantiles
+- Table introspection support for `AggregateFunction` columns
+- Integration tests for AggregateFunction with `AggregatingMergeTree` engine
+- Support for merging multiple aggregate states
+
+### Changed
+- Enhanced DDL generation to exclude unsupported clauses (PRIMARY KEY, ORDER BY, PARTITION BY, SAMPLE BY, TTL) for Distributed tables
+- Improved table introspection to handle Distributed engine arguments correctly
+- Window functions now support `over()` method on both `FunctionCall` and `ParameterizedFunctionCall`
+
+### Testing
+- Added integration tests for Distributed tables with cluster configuration
+- Added comprehensive integration tests for AggregateFunction operations
+- Updated test infrastructure to support multi-node ClickHouse cluster for Distributed table testing
+
+## [0.1.1] - 2025-12-05
+
+### Fixed
+- Fixed test failures related to window functions (`AttributeError: 'FunctionCall' object has no attribute 'over'`)
+- Fixed column mismatch issues in `INSERT FROM SELECT` statements for AggregateFunction tables
+- Fixed test failures related to aggregate function merge operations
+- Improved error handling in integration tests
+
 ## [0.1.0] - 2025-12-05
 
 ### Added
@@ -85,4 +130,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 60 integration tests with live ClickHouse
 - Full test coverage for all major features
 
+[0.1.2]: https://github.com/zwickvitaly/chorm/releases/tag/v0.1.2
+[0.1.1]: https://github.com/zwickvitaly/chorm/releases/tag/v0.1.1
 [0.1.0]: https://github.com/zwickvitaly/chorm/releases/tag/v0.1.0
