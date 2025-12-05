@@ -20,6 +20,8 @@ IMPLEMENTATION_PLAN.md
 
 # Development infrastructure
 docker-compose.yml
+# But allow .github/docker-compose.yml for CI/CD
+!.github/docker-compose.yml
 /docker/
 
 # Development test files
