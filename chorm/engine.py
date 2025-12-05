@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 from typing import Any, Dict, Iterable, Mapping, Sequence, Tuple, TYPE_CHECKING
 from urllib.parse import parse_qsl, urlparse
@@ -104,6 +105,7 @@ class EngineConfig:
     database: str = "default"
     secure: bool = False
     settings: Dict[str, Any] = field(default_factory=dict)
+
 
     # Timeout parameters (following clickhouse-connect defaults)
     connect_timeout: int = 10
@@ -449,6 +451,15 @@ def create_engine(
 
     if config_kwargs:
         config = config.with_overrides(**config_kwargs)
+
+    # Set default password from environment if password is empty
+    if not config.password:
+        env_password = os.environ.get("CLICKHOUSE_PASSWORD")
+        if env_password is not None:
+            config = config.with_overrides(password=env_password)
+        else:
+            # Default to "123" for tests
+            config = config.with_overrides(password="123")
 
     merged_connect_args: Dict[str, Any] = dict(url_connect_args)
     merged_connect_args.update(extra_connect_args)

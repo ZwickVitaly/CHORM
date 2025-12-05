@@ -1,5 +1,6 @@
 """Integration test for comprehensive type coverage with MergeTree."""
 
+import os
 from datetime import datetime, date
 from decimal import Decimal
 from uuid import UUID
@@ -87,7 +88,8 @@ def main():
 
     # Create engine and session
     print("\n1. Connecting to ClickHouse...")
-    engine = create_engine("clickhouse://localhost:8123/default", username="default", password="")
+    password = os.getenv("CLICKHOUSE_PASSWORD", "123")
+    engine = create_engine("clickhouse://localhost:8123/default", username="default", password=password)
     session = Session(engine)
     print("✓ Connected successfully")
 

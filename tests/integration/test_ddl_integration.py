@@ -1,5 +1,6 @@
 """Integration test for DDL and basic operations with real ClickHouse."""
 
+import os
 from chorm import Table, Column, create_engine, Session
 from chorm.types import UInt64, String, DateTime, Array, Nullable
 from chorm.table_engines import MergeTree
@@ -39,7 +40,8 @@ def main():
 
     # Create engine
     print("\n1. Connecting to ClickHouse...")
-    engine = create_engine("clickhouse://localhost:8123/default", username="default", password="")
+    password = os.getenv("CLICKHOUSE_PASSWORD", "123")
+    engine = create_engine("clickhouse://localhost:8123/default", username="default", password=password)
     print("✓ Connected successfully")
 
     # Test DDL generation

@@ -30,12 +30,13 @@ def engine():
     host = os.getenv("CLICKHOUSE_HOST", "localhost")
     port = int(os.getenv("CLICKHOUSE_PORT", "8123"))
     database = os.getenv("CLICKHOUSE_DB", "default")
+    password = os.getenv("CLICKHOUSE_PASSWORD", "123")
 
     engine = create_engine(
         host=host,
         port=port,
         username="default",
-        password="",
+        password=password,
         database=database,
     )
     return engine

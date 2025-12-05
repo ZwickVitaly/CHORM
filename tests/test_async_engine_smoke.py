@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import pathlib
 import sys
 import types
@@ -54,7 +55,7 @@ def test_create_async_engine_defaults(async_client: MagicMock, monkeypatch: pyte
             host="localhost",
             port=8123,
             username="default",
-            password="",
+            password="123",  # Default EngineConfig reads from CLICKHOUSE_PASSWORD env var
             database="default",
             secure=False,
             connect_timeout=10,

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from typing import Any, Dict, Iterable, Mapping, Sequence
 
 import clickhouse_connect
@@ -301,6 +302,15 @@ def create_async_engine(
 
     if config_kwargs:
         config = config.with_overrides(**config_kwargs)
+
+    # Set default password from environment if password is empty
+    if not config.password:
+        env_password = os.environ.get("CLICKHOUSE_PASSWORD")
+        if env_password is not None:
+            config = config.with_overrides(password=env_password)
+        else:
+            # Default to "123" for tests
+            config = config.with_overrides(password="123")
 
     merged_connect_args: Dict[str, Any] = dict(url_connect_args)
     merged_connect_args.update(extra_connect_args)

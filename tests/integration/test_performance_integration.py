@@ -39,7 +39,8 @@ def engine():
     from chorm import create_engine
 
     host = os.getenv("CLICKHOUSE_HOST", "localhost")
-    return create_engine(f"clickhouse://{host}:8123")
+    password = os.getenv("CLICKHOUSE_PASSWORD", "123")
+    return create_engine(f"clickhouse://default:{password}@{host}:8123/default")
 
 
 @pytest.fixture

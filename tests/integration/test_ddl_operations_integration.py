@@ -1,5 +1,6 @@
 """Integration tests for DDL operations with live ClickHouse."""
 
+import os
 import pytest
 from chorm import Table, Column, Session, create_engine
 from chorm.types import UInt64, String, UInt8
@@ -31,7 +32,8 @@ class DDLTestUser(Table):
 @pytest.fixture
 def engine():
     """Create a test engine."""
-    return create_engine("clickhouse://localhost:8123/default", username="default", password="")
+    password = os.getenv("CLICKHOUSE_PASSWORD", "123")
+    return create_engine("clickhouse://localhost:8123/default", username="default", password=password)
 
 
 @pytest.fixture

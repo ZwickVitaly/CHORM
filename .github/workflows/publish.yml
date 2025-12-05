@@ -13,14 +13,14 @@ jobs:
     
     services:
       clickhouse:
-        image: clickhouse/clickhouse-server:24.8
+        image: clickhouse/clickhouse-server:latest
         ports:
           - 8123:8123
           - 9000:9000
         env:
           CLICKHOUSE_DB: default
           CLICKHOUSE_USER: default
-          CLICKHOUSE_PASSWORD: ""
+          CLICKHOUSE_PASSWORD: "123"
           CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
         options: >-
           --health-cmd "wget --spider -q localhost:8123/ping"
@@ -45,12 +45,28 @@ jobs:
         run: |
           pip install -e .
       
+      - name: Wait for ClickHouse to be ready
+        run: |
+          echo "Waiting for ClickHouse to be ready..."
+          for i in {1..30}; do
+            if curl -s http://localhost:8123/ping > /dev/null; then
+              echo "ClickHouse is ready!"
+              break
+            fi
+            echo "Attempt $i/30: ClickHouse not ready yet, waiting..."
+            sleep 2
+          done
+        env:
+          CLICKHOUSE_HOST: localhost
+          CLICKHOUSE_PORT: 8123
+      
       - name: Run tests
         run: |
           pytest tests/ -v --tb=short
         env:
           CLICKHOUSE_HOST: localhost
           CLICKHOUSE_PORT: 8123
+          CLICKHOUSE_PASSWORD: "123"
 
   build:
     name: Build Distribution

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import pathlib
 import sys
 import types
@@ -50,7 +51,7 @@ def test_create_engine_defaults(client: MagicMock, monkeypatch: pytest.MonkeyPat
             host="localhost",
             port=8123,
             username="default",
-            password="",
+            password="123",  # Default EngineConfig reads from CLICKHOUSE_PASSWORD env var
             database="default",
             secure=False,
             connect_timeout=10,

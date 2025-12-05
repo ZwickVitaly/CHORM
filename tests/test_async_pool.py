@@ -14,7 +14,9 @@ from chorm.engine import EngineConfig
 @pytest.fixture
 def config():
     """Create test EngineConfig."""
-    return EngineConfig(host="localhost", port=8123, username="default", password="", database="default")
+    import os
+    password = os.getenv("CLICKHOUSE_PASSWORD", "123")
+    return EngineConfig(host="localhost", port=8123, username="default", password=password, database="default")
 
 
 @pytest.fixture
