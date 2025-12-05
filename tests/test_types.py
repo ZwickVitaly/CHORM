@@ -146,4 +146,4 @@ def test_low_cardinality_passthrough() -> None:
 
 def test_parse_unknown_type_raises() -> None:
     with pytest.raises(ConversionError):
-        parse_type("AggregateFunction(sum, UInt32)")
+        parse_type("UnknownType(123)")

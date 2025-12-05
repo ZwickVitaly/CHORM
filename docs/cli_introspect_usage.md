@@ -88,5 +88,72 @@ class TestUsers(Table):
 
 - File is created in current directory
 - TODO comments added for types requiring manual configuration (e.g., Decimal precision/scale)
+- **AggregateFunction types**: Fully supported! Generated as `AggregateFunction` instances
+  - Example: `Column(AggregateFunction("sum", (UInt64())))`
+  - These are used with `AggregatingMergeTree` engine tables
+  - Full type support with proper imports
 - All imports are automatically generated
 - Works without `chorm.toml` if connection params provided via CLI
+
+## AggregateFunction Support
+
+When introspecting tables with `AggregatingMergeTree` engine that contain `AggregateFunction` columns, the CLI will:
+
+1. **Detect AggregateFunction types** from ClickHouse schema
+2. **Parse function name and arguments** (supports complex cases like `quantiles(0.5, 0.9)`)
+3. **Generate proper `AggregateFunctionType` instances** with correct imports
+4. **Fully supported** - no manual fixes needed!
+
+### Example: AggregatingMergeTree Table
+
+```python
+# Generated code for table with AggregateFunction columns:
+from chorm import Table, Column
+from chorm.types import AggregateFunction, Date, UInt32, UInt64
+from chorm.table_engines import AggregatingMergeTree
+
+class SupplierWarehouseData(Table):
+    __tablename__ = 'supplier_warehouse_data'
+    __engine__ = AggregatingMergeTree()
+    __order_by__ = ['id', 'date', 'warehouse']
+    __partition_by__ = 'toYYYYMM(date)'
+
+    id = Column(UInt32())
+    date = Column(Date())
+    warehouse = Column(UInt32())
+    revenue_state = Column(AggregateFunction("sum", (UInt64())))
+    uniq_wb_state = Column(AggregateFunction("uniqExact", (UInt32())))
+```
+
+### Using AggregateFunction in Code
+
+You can use `AggregateFunction` directly in your models with functions from `func` namespace:
+
+```python
+from chorm import Table, Column
+from chorm.types import AggregateFunction, UInt64, UInt32
+from chorm.sql.expression import func
+from chorm.table_engines import AggregatingMergeTree
+
+class Metrics(Table):
+    __tablename__ = "metrics"
+    __engine__ = AggregatingMergeTree()
+    __order_by__ = ["id"]
+    
+    id = Column(UInt32())
+    # Using func namespace (preferred)
+    revenue_state = Column(AggregateFunction(func.sum, (UInt64())))
+    quantile_state = Column(AggregateFunction(func.quantile(0.5, "dummy"), (UInt64())))
+    quantiles_state = Column(AggregateFunction(func.quantiles([0.5, 0.9], "dummy"), (UInt64())))
+    
+    # Or using string (for backward compatibility)
+    # revenue_state = Column(AggregateFunction("sum", (UInt64())))
+    # Or using string type specification:
+    # revenue_state = Column("AggregateFunction(sum, UInt64)")
+```
+
+**Note**: 
+- `AggregateFunction` (alias for `AggregateFunctionType`) is fully supported in CHORM
+- First argument can be a function from `func` namespace (e.g., `func.sum`, `func.quantile(0.5, "dummy")`) or a string
+- For functions with parameters (like `quantile`, `quantiles`), use dummy argument when creating FunctionCall
+- Values are stored as binary states (bytes) and should be used with `-State` combinators for insertion and `-Merge` combinators for reading

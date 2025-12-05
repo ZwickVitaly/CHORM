@@ -151,6 +151,65 @@ class FunctionCall(Expression):
         rendered = ", ".join(arg.to_sql() for arg in self.args)
         return f"{self.name}({rendered})"
 
+    def __call__(self, *args: Any) -> "FunctionCall":
+        """Allow function calls to be parameterized (curried).
+        
+        This enables syntax like quantileState(0.5)(value) for parameterized functions.
+        """
+        coerced_args = tuple(_coerce(arg) for arg in args)
+        return FunctionCall(self.name, self.args + coerced_args)
+
+    def over(
+        self,
+        partition_by: Union[Expression, List[Expression], None] = None,
+        order_by: Union[Expression, List[Expression], None] = None,
+        frame: Optional[str] = None,
+    ) -> "WindowFunction":
+        """Create a window function expression.
+
+        Args:
+            partition_by: Expression or list of expressions to partition by
+            order_by: Expression or list of expressions to order by
+            frame: Window frame specification (e.g. "ROWS BETWEEN 1 PRECEDING AND CURRENT ROW")
+
+        Returns:
+            WindowFunction expression
+        """
+        partition_list = []
+        if partition_by:
+            if isinstance(partition_by, (list, tuple)):
+                partition_list = [_coerce(p) for p in partition_by]
+            else:
+                partition_list = [_coerce(partition_by)]
+
+        order_list = []
+        if order_by:
+            if isinstance(order_by, (list, tuple)):
+                order_list = [_coerce(p) for p in order_by]
+            else:
+                order_list = [_coerce(order_by)]
+
+        window = Window(partition_by=partition_list, order_by=order_list, frame=frame)
+        return WindowFunction(self, window)
+
+
+@dataclass(frozen=True)
+class ParameterizedFunctionCall(Expression):
+    """Represents a parameterized function call like quantileState(0.5)(value).
+    
+    In ClickHouse, some functions like quantileState are parameterized:
+    - quantileState(0.5) returns a function that takes a value
+    - quantileState(0.5)(value) is the full call
+    """
+    name: str
+    params: Tuple[Expression, ...]
+    args: Tuple[Expression, ...]
+
+    def to_sql(self) -> str:
+        params_rendered = ", ".join(param.to_sql() for param in self.params)
+        args_rendered = ", ".join(arg.to_sql() for arg in self.args)
+        return f"{self.name}({params_rendered})({args_rendered})"
+
     def over(
         self,
         partition_by: Union[Expression, List[Expression], None] = None,
@@ -1151,14 +1210,48 @@ def any_last(expr: Any) -> FunctionCall:
 
 def any_heavy(expr: Any) -> FunctionCall:
     """Return frequently occurring value (heavy hitter).
-
+    
     Args:
         expr: Expression to sample
-
+        
     Example:
         select(anyHeavy(User.browser)).select_from(User)
     """
     return func.anyHeavy(expr)
+
+
+def arg_max(expr: Any, value: Any) -> FunctionCall:
+    """Return the value of `expr` for the row with maximum `value`.
+    
+    Args:
+        expr: Expression to return
+        value: Expression to maximize
+        
+    Example:
+        # Get the name of the user with the latest update
+        select(
+            User.id,
+            argMax(User.name, User.updated_at).label('name')
+        ).group_by(User.id)
+    """
+    return func.argMax(expr, value)
+
+
+def arg_min(expr: Any, value: Any) -> FunctionCall:
+    """Return the value of `expr` for the row with minimum `value`.
+    
+    Args:
+        expr: Expression to return
+        value: Expression to minimize
+        
+    Example:
+        # Get the name of the user with the earliest creation
+        select(
+            User.id,
+            argMin(User.name, User.created_at).label('name')
+        ).group_by(User.id)
+    """
+    return func.argMin(expr, value)
 
 
 # Dictionary functions
@@ -1208,3 +1301,228 @@ def dict_has(dict_name: str, id_expr: Any) -> FunctionCall:
     from chorm.sql.expression import Literal
 
     return func.dictHas(Literal(dict_name), id_expr)
+
+
+# --- AggregateFunction combinators (State and Merge) ---
+
+
+def sum_state(value: Any) -> FunctionCall:
+    """Create sum state for AggregateFunction(sum, ...).
+    
+    Used when inserting into AggregateFunction columns.
+    
+    Example:
+        insert(Metrics).values(sum_state=sum_state(Order.amount))
+    """
+    return func.sumState(value)
+
+
+def sum_merge(value: Any) -> FunctionCall:
+    """Merge sum states and return final result.
+    
+    Used when selecting from AggregateFunction(sum, ...) columns.
+    
+    Example:
+        select(sum_merge(Metrics.revenue_state)).select_from(Metrics)
+    """
+    return func.sumMerge(value)
+
+
+def avg_state(value: Any) -> FunctionCall:
+    """Create avg state for AggregateFunction(avg, ...)."""
+    return func.avgState(value)
+
+
+def avg_merge(value: Any) -> FunctionCall:
+    """Merge avg states and return final result."""
+    return func.avgMerge(value)
+
+
+def count_state(value: Any | None = None) -> FunctionCall:
+    """Create count state for AggregateFunction(count, ...)."""
+    if value is None:
+        return func.countState()
+    return func.countState(value)
+
+
+def count_merge(value: Any) -> FunctionCall:
+    """Merge count states and return final result."""
+    return func.countMerge(value)
+
+
+def uniq_state(value: Any) -> FunctionCall:
+    """Create uniq state for AggregateFunction(uniq, ...)."""
+    return func.uniqState(value)
+
+
+def uniq_merge(value: Any) -> FunctionCall:
+    """Merge uniq states and return final result."""
+    return func.uniqMerge(value)
+
+
+def uniq_exact_state(value: Any) -> FunctionCall:
+    """Create uniqExact state for AggregateFunction(uniqExact, ...)."""
+    return func.uniqExactState(value)
+
+
+def uniq_exact_merge(value: Any) -> FunctionCall:
+    """Merge uniqExact states and return final result."""
+    return func.uniqExactMerge(value)
+
+
+def quantile_state(level: Any, expr: Any) -> ParameterizedFunctionCall:
+    """Create quantile state for AggregateFunction(quantile(...), ...).
+    
+    In ClickHouse, quantileState is a parameterized function:
+    quantileState(0.5)(value) - where 0.5 is the parameter and value is the argument.
+    """
+    from chorm.sql.expression import ParameterizedFunctionCall
+    return ParameterizedFunctionCall(
+        "quantileState",
+        params=(_coerce(level),),
+        args=(_coerce(expr),)
+    )
+
+
+def quantile_merge(level: Any, value: Any) -> ParameterizedFunctionCall:
+    """Merge quantile states and return final result.
+    
+    In ClickHouse, quantileMerge is a parameterized function:
+    quantileMerge(0.5)(state) - where 0.5 is the parameter and state is the argument.
+    """
+    from chorm.sql.expression import ParameterizedFunctionCall
+    return ParameterizedFunctionCall(
+        "quantileMerge",
+        params=(_coerce(level),),
+        args=(_coerce(value),)
+    )
+
+
+def quantiles_state(levels: Any, expr: Any) -> ParameterizedFunctionCall:
+    """Create quantiles state for AggregateFunction(quantiles(...), ...).
+    
+    In ClickHouse, quantilesState is a parameterized function:
+    quantilesState(0.5, 0.9)(value) - where [0.5, 0.9] are parameters and value is the argument.
+    """
+    from chorm.sql.expression import ParameterizedFunctionCall
+    # Handle list/tuple of levels
+    if isinstance(levels, (list, tuple)):
+        params = tuple(_coerce(level) for level in levels)
+    else:
+        params = (_coerce(levels),)
+    return ParameterizedFunctionCall(
+        "quantilesState",
+        params=params,
+        args=(_coerce(expr),)
+    )
+
+
+def quantiles_merge(levels: Any, value: Any) -> ParameterizedFunctionCall:
+    """Merge quantiles states and return final result.
+    
+    In ClickHouse, quantilesMerge is a parameterized function:
+    quantilesMerge(0.5, 0.9)(state) - where [0.5, 0.9] are parameters and state is the argument.
+    """
+    from chorm.sql.expression import ParameterizedFunctionCall
+    # Handle list/tuple of levels
+    if isinstance(levels, (list, tuple)):
+        params = tuple(_coerce(level) for level in levels)
+    else:
+        params = (_coerce(levels),)
+    return ParameterizedFunctionCall(
+        "quantilesMerge",
+        params=params,
+        args=(_coerce(value),)
+    )
+
+
+def min_state(value: Any) -> FunctionCall:
+    """Create min state for AggregateFunction(min, ...)."""
+    return func.minState(value)
+
+
+def min_merge(value: Any) -> FunctionCall:
+    """Merge min states and return final result."""
+    return func.minMerge(value)
+
+
+def max_state(value: Any) -> FunctionCall:
+    """Create max state for AggregateFunction(max, ...)."""
+    return func.maxState(value)
+
+
+def max_merge(value: Any) -> FunctionCall:
+    """Merge max states and return final result."""
+    return func.maxMerge(value)
+
+
+# --- AggregateFunction combinators for conditional functions (If) ---
+
+
+def sum_if_state(column: Any, condition: Any) -> FunctionCall:
+    """Create sumIf state for AggregateFunction(sumIf, ...).
+    
+    Used when inserting into AggregateFunction(sumIf, ...) columns.
+    
+    Example:
+        insert(Metrics).values(sum_state=sum_if_state(Order.amount, Order.status == 'completed'))
+    """
+    return func.sumIfState(column, condition)
+
+
+def sum_if_merge(value: Any) -> FunctionCall:
+    """Merge sumIf states and return final result.
+    
+    Used when selecting from AggregateFunction(sumIf, ...) columns.
+    """
+    return func.sumIfMerge(value)
+
+
+def avg_if_state(column: Any, condition: Any) -> FunctionCall:
+    """Create avgIf state for AggregateFunction(avgIf, ...)."""
+    return func.avgIfState(column, condition)
+
+
+def avg_if_merge(value: Any) -> FunctionCall:
+    """Merge avgIf states and return final result."""
+    return func.avgIfMerge(value)
+
+
+def count_if_state(condition: Any) -> FunctionCall:
+    """Create countIf state for AggregateFunction(countIf, ...)."""
+    return func.countIfState(condition)
+
+
+def count_if_merge(value: Any) -> FunctionCall:
+    """Merge countIf states and return final result."""
+    return func.countIfMerge(value)
+
+
+def min_if_state(column: Any, condition: Any) -> FunctionCall:
+    """Create minIf state for AggregateFunction(minIf, ...)."""
+    return func.minIfState(column, condition)
+
+
+def min_if_merge(value: Any) -> FunctionCall:
+    """Merge minIf states and return final result."""
+    return func.minIfMerge(value)
+
+
+def max_if_state(column: Any, condition: Any) -> FunctionCall:
+    """Create maxIf state for AggregateFunction(maxIf, ...)."""
+    return func.maxIfState(column, condition)
+
+
+def max_if_merge(value: Any) -> FunctionCall:
+    """Merge maxIf states and return final result."""
+    return func.maxIfMerge(value)
+
+
+def uniq_if_state(column: Any, condition: Any) -> FunctionCall:
+    """Create uniqIf state for AggregateFunction(uniqIf, ...)."""
+    return func.uniqIfState(column, condition)
+
+
+def uniq_if_merge(value: Any) -> FunctionCall:
+    """Merge uniqIf states and return final result."""
+    return func.uniqIfMerge(value)

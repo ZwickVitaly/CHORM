@@ -902,6 +902,193 @@ stmt = (
 )
 ```
 
+## Table Engines
+
+CHORM supports all major ClickHouse table engines. Choose the right engine based on your use case:
+
+### MergeTree Family
+
+**MergeTree** - Default engine for most use cases:
+```python
+from chorm.table_engines import MergeTree
+
+class User(Table):
+    __tablename__ = "users"
+    engine = MergeTree()
+    # ORDER BY is required for MergeTree
+```
+
+**ReplacingMergeTree** - For data with updates (deduplication):
+```python
+from chorm.table_engines import ReplacingMergeTree
+
+class User(Table):
+    __tablename__ = "users"
+    engine = ReplacingMergeTree(version_column="updated_at")
+    # Keeps only the latest version based on version_column
+```
+
+**SummingMergeTree** - For pre-aggregated metrics:
+```python
+from chorm.table_engines import SummingMergeTree
+
+class Metrics(Table):
+    __tablename__ = "metrics"
+    engine = SummingMergeTree(columns=["value", "count"])
+    # Automatically sums numeric columns during merges
+```
+
+**AggregatingMergeTree** - For pre-aggregated data with aggregate functions:
+```python
+from chorm.table_engines import AggregatingMergeTree
+
+class AggregatedStats(Table):
+    __tablename__ = "aggregated_stats"
+    engine = AggregatingMergeTree()
+    # Stores pre-computed aggregates
+```
+
+**CollapsingMergeTree** - For data with sign-based updates:
+```python
+from chorm.table_engines import CollapsingMergeTree
+
+class Events(Table):
+    __tablename__ = "events"
+    engine = CollapsingMergeTree(sign_column="sign")
+    # sign=1 for insert, sign=-1 for delete
+```
+
+**VersionedCollapsingMergeTree** - CollapsingMergeTree with versioning:
+```python
+from chorm.table_engines import VersionedCollapsingMergeTree
+
+class Events(Table):
+    __tablename__ = "events"
+    engine = VersionedCollapsingMergeTree(sign_column="sign", version_column="version")
+```
+
+**GraphiteMergeTree** - For Graphite metrics:
+```python
+from chorm.table_engines import GraphiteMergeTree
+
+class GraphiteData(Table):
+    __tablename__ = "graphite"
+    engine = GraphiteMergeTree(config_element="graphite_rollup")
+```
+
+### Replicated Engines
+
+All MergeTree engines have replicated versions for high availability:
+
+```python
+from chorm.table_engines import (
+    ReplicatedMergeTree,
+    ReplicatedReplacingMergeTree,
+    ReplicatedSummingMergeTree,
+    ReplicatedAggregatingMergeTree,
+    ReplicatedCollapsingMergeTree,
+    ReplicatedVersionedCollapsingMergeTree,
+    ReplicatedGraphiteMergeTree
+)
+
+class ReplicatedUser(Table):
+    __tablename__ = "users"
+    engine = ReplicatedMergeTree(
+        zookeeper_path="/clickhouse/tables/users",
+        replica_name="replica1"
+    )
+```
+
+### Log Engines
+
+For small tables and temporary data:
+
+```python
+from chorm.table_engines import Log, TinyLog, StripeLog
+
+# Log - General purpose log engine
+class TempData(Table):
+    __tablename__ = "temp"
+    engine = Log()
+
+# TinyLog - Minimal overhead
+class SmallTable(Table):
+    __tablename__ = "small"
+    engine = TinyLog()
+
+# StripeLog - Better for writes
+class WriteHeavy(Table):
+    __tablename__ = "writes"
+    engine = StripeLog()
+```
+
+### Special Engines
+
+**Memory** - In-memory storage:
+```python
+from chorm.table_engines import Memory
+
+class Cache(Table):
+    __tablename__ = "cache"
+    engine = Memory()
+```
+
+**Distributed** - Distributed tables across cluster:
+```python
+from chorm.table_engines import Distributed
+
+class DistributedUser(Table):
+    __tablename__ = "users_distributed"
+    engine = Distributed(
+        cluster="my_cluster",
+        database="default",
+        table="users"
+    )
+```
+
+**Kafka** - Kafka integration:
+```python
+from chorm.table_engines import Kafka
+
+class KafkaEvents(Table):
+    __tablename__ = "kafka_events"
+    engine = Kafka()
+```
+
+**External Data Sources:**
+```python
+from chorm.table_engines import MySQL, PostgreSQL, ODBC, JDBC
+
+# MySQL
+class MySQLTable(Table):
+    engine = MySQL(
+        host="mysql.example.com",
+        database="db",
+        table="table",
+        user="user",
+        password="pass"
+    )
+
+# PostgreSQL
+class PostgresTable(Table):
+    engine = PostgreSQL(
+        host="postgres.example.com",
+        database="db",
+        table="table",
+        user="user",
+        password="pass"
+    )
+```
+
+**Other Engines:**
+- `File` - File-based storage
+- `Null` - Discards writes, returns empty reads
+- `Set` - Set data structure
+- `Join` - Join table for JOIN operations
+- `View` - Materialized view
+
+See [Best Practices Guide](docs/best_practices.md) for guidance on choosing the right engine.
+
 ## ClickHouse-Specific Features
 
 ## Type System

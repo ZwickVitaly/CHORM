@@ -5,7 +5,7 @@ import pytest
 from chorm import Table, Column, MergeTree, select, insert, create_engine
 from chorm.session import Session
 from chorm.types import UInt64, String, Float64, Array
-from chorm.sql.expression import func, sum_if, count_if, avg_if, group_uniq_array, sum_array, avg_array
+from chorm.sql.expression import func, sum_if, count_if, avg_if, min_if, max_if, uniq_if, group_uniq_array, sum_array, avg_array
 
 
 # Skip integration tests if ClickHouse is not available
@@ -168,3 +168,150 @@ def test_array_functions(engine, setup_tables):
     assert result.total_score == 270
     # Average: 270 / 3 = 90
     assert result.avg_score == 90.0
+
+
+def test_min_if_integration(engine, setup_tables):
+    """Test minIf with real data."""
+    session = Session(engine)
+
+    stmt = select(
+        min_if(Order.amount, Order.status == "completed").label("min_completed"),
+        min_if(Order.amount, Order.status == "pending").label("min_pending"),
+    ).select_from(Order)
+
+    result = session.execute(stmt).first()
+
+    # Min of completed: 100, 200, 300 -> 100
+    assert result.min_completed == 100.0
+    # Min of pending: 150, 50 -> 50
+    assert result.min_pending == 50.0
+
+
+def test_max_if_integration(engine, setup_tables):
+    """Test maxIf with real data."""
+    session = Session(engine)
+
+    stmt = select(
+        max_if(Order.amount, Order.status == "completed").label("max_completed"),
+        max_if(Order.amount, Order.status == "pending").label("max_pending"),
+    ).select_from(Order)
+
+    result = session.execute(stmt).first()
+
+    # Max of completed: 100, 200, 300 -> 300
+    assert result.max_completed == 300.0
+    # Max of pending: 150, 50 -> 150
+    assert result.max_pending == 150.0
+
+
+def test_uniq_if_integration(engine, setup_tables):
+    """Test uniqIf with real data."""
+    session = Session(engine)
+
+    stmt = select(
+        uniq_if(Order.user_id, Order.status == "completed").label("unique_users_completed"),
+        uniq_if(Order.user_id, Order.status == "pending").label("unique_users_pending"),
+    ).select_from(Order)
+
+    result = session.execute(stmt).first()
+
+    # Completed orders: user_id 1, 1, 3 -> unique: 1, 3 -> 2
+    assert result.unique_users_completed == 2
+    # Pending orders: user_id 2, 1 -> unique: 1, 2 -> 2
+    assert result.unique_users_pending == 2
+
+
+def test_all_conditional_functions_integration(engine, setup_tables):
+    """Test all conditional functions together."""
+    session = Session(engine)
+
+    stmt = select(
+        sum_if(Order.amount, Order.status == "completed").label("sum"),
+        avg_if(Order.amount, Order.status == "completed").label("avg"),
+        count_if(Order.status == "completed").label("count"),
+        min_if(Order.amount, Order.status == "completed").label("min"),
+        max_if(Order.amount, Order.status == "completed").label("max"),
+        uniq_if(Order.user_id, Order.status == "completed").label("uniq"),
+    ).select_from(Order)
+
+    result = session.execute(stmt).first()
+
+    assert result.sum == 600.0
+    assert result.avg == 200.0
+    assert result.count == 3
+    assert result.min == 100.0
+    assert result.max == 300.0
+    assert result.uniq == 2
+
+
+def test_conditional_functions_through_func_namespace(engine, setup_tables):
+    """Test conditional functions accessed through func namespace."""
+    session = Session(engine)
+
+    stmt = select(
+        func.sumIf(Order.amount, Order.status == "completed").label("sum"),
+        func.avgIf(Order.amount, Order.status == "completed").label("avg"),
+        func.countIf(Order.status == "completed").label("count"),
+        func.minIf(Order.amount, Order.status == "completed").label("min"),
+        func.maxIf(Order.amount, Order.status == "completed").label("max"),
+        func.uniqIf(Order.user_id, Order.status == "completed").label("uniq"),
+    ).select_from(Order)
+
+    result = session.execute(stmt).first()
+
+    assert result.sum == 600.0
+    assert result.avg == 200.0
+    assert result.count == 3
+    assert result.min == 100.0
+    assert result.max == 300.0
+    assert result.uniq == 2
+
+
+def test_conditional_functions_with_group_by(engine, setup_tables):
+    """Test conditional functions with GROUP BY."""
+    session = Session(engine)
+
+    stmt = (
+        select(
+            Order.user_id,
+            sum_if(Order.amount, Order.status == "completed").label("completed_sum"),
+            count_if(Order.status == "completed").label("completed_count"),
+            sum_if(Order.amount, Order.status == "pending").label("pending_sum"),
+        )
+        .select_from(Order)
+        .group_by(Order.user_id)
+        .order_by(Order.user_id)
+    )
+
+    results = session.execute(stmt).all()
+
+    # User 1: completed: 100+200=300, count=2; pending: 50
+    # User 2: completed: 0, count=0; pending: 150
+    # User 3: completed: 300, count=1; pending: 0
+    # User 4: completed: 0, count=0; pending: 0
+
+    assert len(results) == 4
+    user1 = next(r for r in results if r.user_id == 1)
+    assert user1.completed_sum == 300.0
+    assert user1.completed_count == 2
+    assert user1.pending_sum == 50.0
+
+
+def test_conditional_functions_complex_conditions(engine, setup_tables):
+    """Test conditional functions with complex conditions."""
+    session = Session(engine)
+
+    # Add more test data with numeric status
+    # We'll use amount > 100 as condition
+    stmt = select(
+        sum_if(Order.amount, Order.amount > 100).label("sum_high"),
+        count_if(Order.amount > 100).label("count_high"),
+        avg_if(Order.amount, Order.amount > 100).label("avg_high"),
+    ).select_from(Order)
+
+    result = session.execute(stmt).first()
+
+    # Orders with amount > 100: 200, 150, 300, 500 -> sum=1150, count=4, avg=287.5
+    assert result.sum_high == 1150.0
+    assert result.count_high == 4
+    assert result.avg_high == 287.5

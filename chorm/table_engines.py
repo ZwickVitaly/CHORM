@@ -297,8 +297,24 @@ class View(TableEngine):
 
 
 class Distributed(TableEngine):
+    """Distributed table engine for distributed queries across cluster.
+    
+    Syntax: Distributed(cluster, database, table[, sharding_key[, policy_name]])
+    
+    Args:
+        cluster: Cluster name (required)
+        database: Remote database name (required)
+        table: Remote table name (required)
+        sharding_key: Sharding key expression (optional)
+        policy_name: Sharding policy name (optional)
+    
+    Example:
+        Distributed(cluster="my_cluster", database="default", table="users")
+        Distributed(cluster="my_cluster", database="default", table="users", 
+                   sharding_key="rand()")
+    """
     engine_name = "Distributed"
-    arg_names = ("cluster", "database", "table", "sharding_key")
+    arg_names = ("cluster", "database", "table", "sharding_key", "policy_name")
     required_args = ("cluster", "database", "table")
 
 

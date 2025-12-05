@@ -1,10 +1,10 @@
-name: Publish to PyPI
+name: CI Tests
 
 on:
   push:
-    tags:
-      - 'v*'  # Trigger on version tags (v0.1.0, v1.0.0, etc.)
-  workflow_dispatch:  # Allow manual trigger
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
 
 jobs:
   test:
@@ -63,59 +63,3 @@ jobs:
         run: |
           docker compose -f .github/docker-compose.yml down -v
 
-  build:
-    name: Build Distribution
-    needs: test
-    runs-on: ubuntu-latest
-    
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      
-      - name: Install build tools
-        run: |
-          python -m pip install --upgrade pip
-          pip install build twine
-      
-      - name: Build package
-        run: python -m build
-      
-      - name: Check package
-        run: twine check dist/*
-      
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: dist
-          path: dist/
-
-  publish:
-    name: Publish to PyPI
-    needs: build
-    runs-on: ubuntu-latest
-    permissions:
-      id-token: write  # Required for trusted publishing
-    
-    steps:
-      - name: Download artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: dist
-          path: dist/
-      
-      - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
-        # Option 1: Trusted Publishing (recommended, no secrets needed)
-        # Configure in PyPI: Account Settings → Manage → Add pending publisher
-        # Repository: ZwickVitaly/CHORM (exact case-sensitive match required!)
-        # Workflow file: .github/workflows/publish.yml
-        
-        # Option 2: Use API token (if Trusted Publishing not configured)
-        # Uncomment the following and add PYPI_API_TOKEN to GitHub secrets:
-        # with:
-        #   password: ${{ secrets.PYPI_API_TOKEN }}
-        #   repository-url: https://upload.pypi.org/legacy/

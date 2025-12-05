@@ -23,18 +23,23 @@ def format_ddl(metadata: TableMetadata, *, if_not_exists: bool = False) -> str:
             parts.append(f"DEFAULT {column.column.default!r}")
         column_lines.append(" ".join(parts))
 
+    # Some engines (like Distributed, View, etc.) don't support PRIMARY KEY, ORDER BY, etc.
+    engine_name = metadata.engine.engine_name
+    supports_structure_clauses = engine_name not in ("Distributed", "View", "MaterializedView")
+    
     clauses = []
-    if metadata.primary_key:
-        column_list = ", ".join(format_identifier(col.name) for col in metadata.primary_key)
-        clauses.append(f"PRIMARY KEY ({column_list})")
-    if metadata.partition_by:
-        clauses.append(f"PARTITION BY ({', '.join(metadata.partition_by)})")
-    if metadata.order_by:
-        clauses.append(f"ORDER BY ({', '.join(metadata.order_by)})")
-    if metadata.sample_by:
-        clauses.append(f"SAMPLE BY ({', '.join(metadata.sample_by)})")
-    if metadata.ttl:
-        clauses.append(f"TTL {metadata.ttl}")
+    if supports_structure_clauses:
+        if metadata.primary_key:
+            column_list = ", ".join(format_identifier(col.name) for col in metadata.primary_key)
+            clauses.append(f"PRIMARY KEY ({column_list})")
+        if metadata.partition_by:
+            clauses.append(f"PARTITION BY ({', '.join(metadata.partition_by)})")
+        if metadata.order_by:
+            clauses.append(f"ORDER BY ({', '.join(metadata.order_by)})")
+        if metadata.sample_by:
+            clauses.append(f"SAMPLE BY ({', '.join(metadata.sample_by)})")
+        if metadata.ttl:
+            clauses.append(f"TTL {metadata.ttl}")
 
     engine = metadata.engine.format_clause()
     clause_sql = metadata.engine.format_clause()

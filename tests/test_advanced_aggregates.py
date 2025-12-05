@@ -9,6 +9,8 @@ from chorm.sql.expression import (
     group_bit_xor,
     any_last,
     any_heavy,
+    arg_max,
+    arg_min,
     Identifier,
 )
 
@@ -54,3 +56,19 @@ def test_any_last():
 def test_any_heavy():
     """Test anyHeavy heavy hitter aggregate."""
     assert any_heavy(Identifier("browser")).to_sql() == "anyHeavy(browser)"
+
+
+def test_arg_max():
+    """Test argMax aggregate."""
+    assert (
+        arg_max(Identifier("name"), Identifier("updated_at")).to_sql()
+        == "argMax(name, updated_at)"
+    )
+
+
+def test_arg_min():
+    """Test argMin aggregate."""
+    assert (
+        arg_min(Identifier("name"), Identifier("created_at")).to_sql()
+        == "argMin(name, created_at)"
+    )

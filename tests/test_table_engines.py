@@ -44,7 +44,8 @@ def test_replicated_merge_tree_requires_arguments() -> None:
 
 def test_keyword_arguments_supported() -> None:
     engine = Distributed(cluster="default", database="db", table="tbl", sharding_key="rand()")
-    assert engine.args == ("default", "db", "tbl", "rand()")
+    # policy_name is optional, so args includes None for it
+    assert engine.args == ("default", "db", "tbl", "rand()", None)
     clause = engine.format_clause()
     assert clause.startswith("Distributed(")
 

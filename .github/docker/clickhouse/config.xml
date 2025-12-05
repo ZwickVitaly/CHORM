@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+<clickhouse>
+    <!-- Cluster configuration for testing Distributed tables -->
+    <remote_servers>
+        <test_cluster>
+            <shard>
+                <replica>
+                    <host>clickhouse</host>
+                    <port>9000</port>
+                    <user>default</user>
+                    <password>123</password>
+                </replica>
+            </shard>
+            <shard>
+                <replica>
+                    <host>clickhouse_distributed</host>
+                    <port>9000</port>
+                    <user>default</user>
+                    <password>123</password>
+                </replica>
+            </shard>
+        </test_cluster>
+    </remote_servers>
+</clickhouse>
+
