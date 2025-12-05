@@ -89,7 +89,13 @@ jobs:
       
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          password: ${{ secrets.PYPI_API_TOKEN }}
-          # For trusted publishing (recommended), remove password and use:
-          # repository-url: https://upload.pypi.org/legacy/
+        # Option 1: Trusted Publishing (recommended, no secrets needed)
+        # Configure in PyPI: Account Settings → Manage → Add pending publisher
+        # Repository: zwickvitaly/chorm
+        # Workflow file: .github/workflows/publish.yml
+        
+        # Option 2: Use API token (if Trusted Publishing not configured)
+        # Uncomment the following and add PYPI_API_TOKEN to GitHub secrets:
+        # with:
+        #   password: ${{ secrets.PYPI_API_TOKEN }}
+        #   repository-url: https://upload.pypi.org/legacy/

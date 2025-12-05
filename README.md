@@ -32,7 +32,7 @@ A powerful SQLAlchemy-like ORM for ClickHouse, optimized for analytics and high-
 ## Installation
 
 ```bash
-pip install chorm
+pip install clickhouse-chorm
 ```
 
 ## Quick Start

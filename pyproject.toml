@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "chorm"
+name = "clickhouse-chorm"
 version = "0.1.0"
 description = "A modern, type-safe ORM for ClickHouse with full support for ClickHouse-specific features"
 readme = "README.md"
