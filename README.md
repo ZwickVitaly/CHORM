@@ -9,7 +9,8 @@ A powerful SQLAlchemy-like ORM for ClickHouse, optimized for analytics and high-
 - **Native ClickHouse Types**: Full support for ClickHouse-specific types (UInt64, Array, Nullable, etc.)
 - **Type Safety**: Explicit type declarations for better IDE support
 - **Async Support**: Full async/await support with AsyncSession
-- **Query Builder**: Fluent API for SELECT, INSERT, UPDATE, DELETE
+- **Query Builder**: Fluent API for Select, Insert, Update, Delete
+- **Compression Codecs**: Fine-grained storage optimization via `Column(..., codec=ZSTD(1))`
 
 ### Analytics & Advanced Queries
 - **Window Functions**: ROW_NUMBER, RANK, DENSE_RANK, LAG, LEAD, and aggregate window functions

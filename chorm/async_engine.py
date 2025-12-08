@@ -27,6 +27,7 @@ class AsyncEngine:
         max_overflow: int | None = None,
         pool_timeout: float | None = None,
         pool_recycle: int | None = None,
+        pool_pre_ping: bool = False,
     ) -> None:
         self._config = config
         self._connect_args = dict(connect_args or {})
@@ -42,8 +43,11 @@ class AsyncEngine:
                 max_overflow=max_overflow or 10,
                 timeout=pool_timeout or 30.0,
                 recycle=pool_recycle or 3600,
+                pre_ping=pool_pre_ping,
                 connect_args=self._connect_args,
             )
+
+
 
     @property
     def config(self) -> EngineConfig:
@@ -256,6 +260,7 @@ def create_async_engine(
     max_overflow: int | None = None,
     pool_timeout: float | None = None,
     pool_recycle: int | None = None,
+    pool_pre_ping: bool = False,
     **kwargs: Any,
 ) -> AsyncEngine:
     """Create an `AsyncEngine` from an optional URL and keyword overrides.
@@ -267,6 +272,7 @@ def create_async_engine(
         max_overflow: Maximum overflow connections (default: 10)
         pool_timeout: Connection acquisition timeout in seconds (default: 30.0)
         pool_recycle: Connection recycle time in seconds (default: 3600)
+        pool_pre_ping: Enable active connection validation (default: False)
         **kwargs: Engine configuration and connection parameters
 
     Returns:
@@ -324,4 +330,5 @@ def create_async_engine(
         max_overflow=max_overflow,
         pool_timeout=pool_timeout,
         pool_recycle=pool_recycle,
+        pool_pre_ping=pool_pre_ping,
     )

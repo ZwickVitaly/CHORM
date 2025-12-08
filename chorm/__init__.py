@@ -40,6 +40,17 @@ from chorm.query_cache import (
     disable_global_cache,
     get_global_cache,
 )
+from chorm.codecs import (
+    Codec,
+    ZSTD,
+    LZ4,
+    LZ4HC,
+    Delta,
+    DoubleDelta,
+    Gorilla,
+    T64,
+    FPC,
+)
 from chorm.query_settings import (
     QuerySettings,
     ExecutionStats,
@@ -279,4 +290,14 @@ __all__ = [
     "PostgreSQL",
     "ODBC",
     "JDBC",
+    # Codecs
+    "Codec",
+    "ZSTD",
+    "LZ4",
+    "LZ4HC",
+    "Delta",
+    "DoubleDelta",
+    "Gorilla",
+    "T64",
+    "FPC",
 ]

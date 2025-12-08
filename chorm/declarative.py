@@ -11,6 +11,8 @@ if TYPE_CHECKING:
 from chorm.table_engines import TableEngine
 from chorm.types import FieldType, NullableType, parse_type
 from chorm.sql.expression import Expression
+from chorm.ddl import format_ddl
+from chorm.codecs import Codec
 from chorm.exceptions import ConfigurationError, ValidationError
 from chorm.validators import Validator, validate_value
 
@@ -30,6 +32,7 @@ class Column(Expression):
         default: Any | None = None,
         default_factory: Callable[[], Any] | None = None,
         comment: str | None = None,
+        codec: str | Codec | Sequence[Codec] | None = None,
         validators: Sequence["Validator"] | None = None,
     ) -> None:
         if isinstance(field_type, str):
@@ -42,6 +45,7 @@ class Column(Expression):
         self.default = default
         self.default_factory = default_factory
         self.comment = comment
+        self.codec = codec
         self.validators: tuple["Validator", ...] = tuple(validators) if validators else ()
         self.name: str | None = None
 
@@ -287,7 +291,7 @@ class Table(metaclass=TableMeta):
             raise DeclarativeError(f"Cannot create table for abstract class {cls.__name__}")
         if cls.__table__.engine is None:
             raise DeclarativeError(f"Table {cls.__name__} does not define an engine")
-        from chorm.ddl import format_ddl  # Import here to avoid circular dependency
+
 
         return format_ddl(cls.__table__, if_not_exists=exists_ok)
 

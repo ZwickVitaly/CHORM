@@ -44,6 +44,7 @@ class ConnectionPool:
         max_overflow: int = 10,
         timeout: float = 30.0,
         recycle: int = 3600,
+        pre_ping: bool = False,
         connect_args: Optional[Dict[str, Any]] = None,
     ):
         if pool_size < 1:
@@ -60,6 +61,7 @@ class ConnectionPool:
         self._max_overflow = max_overflow
         self._timeout = timeout
         self._recycle = recycle
+        self._pre_ping = pre_ping
         self._connect_args = connect_args or {}
 
         # Thread-safe queue for pooled connections
@@ -111,6 +113,24 @@ class ConnectionPool:
 
         return conn
 
+
+    def _validate_connection(self, conn: Connection) -> bool:
+        """Validate that a connection is still alive.
+
+        Executes a lightweight query (SELECT 1).
+
+        Args:
+            conn: Connection to validate
+
+        Returns:
+            True if connection is alive, False otherwise
+        """
+        try:
+            conn.execute("SELECT 1")
+            return True
+        except Exception:
+            return False
+
     def get(self) -> Connection:
         """Get a connection from the pool.
 
@@ -131,6 +151,10 @@ class ConnectionPool:
             if self._should_recycle(conn):
                 conn.close()
                 conn = self._create_connection()
+            elif self._pre_ping and not self._validate_connection(conn):
+                # Connection dead, discard and create new one
+                conn.close()
+                conn = self._create_connection()
 
             return conn
 
@@ -149,6 +173,10 @@ class ConnectionPool:
 
                 # Check if connection needs recycling
                 if self._should_recycle(conn):
+                    conn.close()
+                    conn = self._create_connection()
+                elif self._pre_ping and not self._validate_connection(conn):
+                     # Connection dead, discard and create new one
                     conn.close()
                     conn = self._create_connection()
 
@@ -229,6 +257,7 @@ class ConnectionPool:
 
         age = time.time() - created_at
         return age > self._recycle
+
 
     def close_all(self) -> None:
         """Close all connections in the pool.

@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-from chorm.declarative import TableMetadata
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from chorm.declarative import TableMetadata
 
 
 def format_identifier(identifier: str) -> str:
@@ -21,6 +24,22 @@ def format_ddl(metadata: TableMetadata, *, if_not_exists: bool = False) -> str:
         parts = [format_identifier(column.name), column.column.ch_type]
         if column.column.default is not None:
             parts.append(f"DEFAULT {column.column.default!r}")
+        if column.column.codec:
+            codec_val = column.column.codec
+            if hasattr(codec_val, "to_sql"):
+                codec_str = codec_val.to_sql()
+            elif isinstance(codec_val, (list, tuple)):
+                # List of codecs or strings
+                items = []
+                for item in codec_val:
+                    if hasattr(item, "to_sql"):
+                        items.append(item.to_sql())
+                    else:
+                        items.append(str(item))
+                codec_str = ", ".join(items)
+            else:
+                codec_str = str(codec_val)
+            parts.append(f"CODEC({codec_str})")
         column_lines.append(" ".join(parts))
 
     # Some engines (like Distributed, View, etc.) don't support PRIMARY KEY, ORDER BY, etc.

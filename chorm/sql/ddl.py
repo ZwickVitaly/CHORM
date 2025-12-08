@@ -116,8 +116,10 @@ class AlterTableAddColumn(Expression):
         """Render the ALTER TABLE ADD COLUMN statement to SQL."""
         table_name = self.table.__tablename__ if hasattr(self.table, "__tablename__") else str(self.table)
 
+
         # Get column definition
         from chorm.declarative import Column
+
 
         if isinstance(self.column, Column):
             col_name = self.column.name
@@ -211,6 +213,8 @@ class AlterTableModifyColumn(Expression):
     def to_sql(self) -> str:
         """Render the ALTER TABLE MODIFY COLUMN statement to SQL."""
         table_name = self.table.__tablename__ if hasattr(self.table, "__tablename__") else str(self.table)
+
+
 
         # Get column definition
         from chorm.declarative import Column

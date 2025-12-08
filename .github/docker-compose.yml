@@ -3,8 +3,8 @@ services:
     image: clickhouse/clickhouse-server:latest
     container_name: chorm_clickhouse
     ports:
-      - "8123:8123"  # HTTP interface
-      - "9000:9000"  # Native protocol
+      - "8123:8123" # HTTP interface
+      - "9000:9000" # Native protocol
     environment:
       CLICKHOUSE_DB: default
       CLICKHOUSE_USER: default
@@ -19,51 +19,19 @@ services:
         soft: 262144
         hard: 262144
     healthcheck:
-      test: ["CMD", "clickhouse-client", "--query", "SELECT 1"]
+      test: [ "CMD", "clickhouse-client", "--query", "SELECT 1" ]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 30s
     networks:
       - chorm_network
-
-  clickhouse_distributed:
-    image: clickhouse/clickhouse-server:latest
-    container_name: chorm_clickhouse_distributed
-    ports:
-      - "8125:8123"  # HTTP interface
-      - "9002:9000"  # Native protocol
-    environment:
-      CLICKHOUSE_DB: default
-      CLICKHOUSE_USER: default
-      CLICKHOUSE_PASSWORD: "123"
-      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
-    volumes:
-      - clickhouse_distributed_data:/var/lib/clickhouse
-      - clickhouse_distributed_logs:/var/log/clickhouse-server
-      - ./.github/docker/clickhouse/config.xml:/etc/clickhouse-server/config.d/cluster.xml:ro
-    ulimits:
-      nofile:
-        soft: 262144
-        hard: 262144
-    healthcheck:
-      test: ["CMD", "clickhouse-client", "--query", "SELECT 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
-    networks:
-      - chorm_network
-    depends_on:
-      - clickhouse
 
 volumes:
   clickhouse_data:
-  clickhouse_distributed_data:
   clickhouse_logs:
-  clickhouse_distributed_logs:
+
 
 networks:
   chorm_network:
     driver: bridge
-

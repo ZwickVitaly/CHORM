@@ -3,13 +3,25 @@
 from __future__ import annotations
 
 import logging
+import warnings
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Union
+
+from chorm.batch_optimized import (
+    ClickHouseBatchInsert,
+    ClickHouseBatchInsertFromDataFrame,
+    bulk_insert as _optimized_bulk_insert,
+)
 
 logger = logging.getLogger(__name__)
 
 
 class BatchInsert:
     """Optimized batch insert operations.
+
+    .. deprecated:: 0.1.4
+        Use `chorm.batch.ClickHouseBatchInsert` for significantly better performance
+        using native ClickHouse binary protocol. `BatchInsert` generates SQL strings
+        which is slow and inefficient for large datasets.
 
     Provides efficient bulk insertion of data into ClickHouse tables.
 
@@ -27,6 +39,12 @@ class BatchInsert:
     """
 
     def __init__(self, table_name: str, columns: List[str], batch_size: int = 10000, optimize_on_finish: bool = False):
+        warnings.warn(
+            "BatchInsert is deprecated and will be removed in a future version. "
+            "Use chorm.batch.ClickHouseBatchInsert or chorm.batch.bulk_insert for native performance.",
+            DeprecationWarning,
+            stacklevel=2
+        )
         self.table_name = table_name
         self.columns = columns
         self.batch_size = batch_size
@@ -164,6 +182,11 @@ class BatchUpdate:
     """
 
     def __init__(self, table_name: str, batch_size: int = 1000):
+        warnings.warn(
+            "BatchUpdate is deprecated. For large updates, consider using proper batch logic or direct client execution.",
+            DeprecationWarning,
+            stacklevel=2
+        )
         self.table_name = table_name
         self.batch_size = batch_size
 
@@ -246,6 +269,11 @@ class BatchDelete:
     """
 
     def __init__(self, table_name: str, batch_size: int = 1000):
+        warnings.warn(
+            "BatchDelete is deprecated. For large deletes, consider using proper batch logic or direct client execution.",
+            DeprecationWarning,
+            stacklevel=2
+        )
         self.table_name = table_name
         self.batch_size = batch_size
 
@@ -389,7 +417,9 @@ def batch_delete(table_name: str, where_clauses: Iterable[str], batch_size: int 
     return sqls
 
 
-# Public API
+# Expose optimized API
+bulk_insert = _optimized_bulk_insert
+
 __all__ = [
     "BatchInsert",
     "BatchUpdate",
@@ -397,4 +427,7 @@ __all__ = [
     "batch_insert",
     "batch_update",
     "batch_delete",
+    "ClickHouseBatchInsert",
+    "ClickHouseBatchInsertFromDataFrame",
+    "bulk_insert",
 ]

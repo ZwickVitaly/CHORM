@@ -5,6 +5,22 @@ All notable changes to CHORM will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.4] - 2025-12-08
+
+### Added
+- **Codec Support**: Added support for ClickHouse column compression codecs (`CODEC(...)`) via `Column(..., codec=ZSTD(1))`.
+- **Batch Optimization**: Promoted native batch insert implementation (`chorm.batch.bulk_insert`, `ClickHouseBatchInsert`) for high performance.
+- **Connection Pool Liveness**: Added active connection validation and pre-pings to `ConnectionPool` and `AsyncConnectionPool`.
+- **CI/CD**: Added `tests.yml` workflow for PR validation.
+
+### Changed
+- **Performance**: Making Pandas an optional dependency (`pip install "clickhouse-chorm[pandas]"`).
+- **Optimization**: Deprecated legacy SQL-based batch classes (`BatchInsert`, `BatchUpdate`, `BatchDelete`) in favor of native implementations.
+- **Testing**: Refactored Distributed table tests to use single-instance loopback, removing need for second ClickHouse service in CI.
+
+### Fixed
+- **Testing**: Fixed CI workflows to properly wait for ClickHouse and removed deprecated dual-instance configuration.
+
 ## [0.1.3] - 2025-12-06
 
 ### Changed

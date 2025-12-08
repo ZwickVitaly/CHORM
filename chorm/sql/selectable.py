@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Sequence, Union
+from typing import Any, Dict, List, Optional, Sequence, Union, TYPE_CHECKING
+from chorm.sql.explain import Explain
 
 from chorm.sql.expression import (
     Expression,
@@ -11,6 +12,7 @@ from chorm.sql.expression import (
     Subquery,
     ScalarSubquery,
     CTE,
+    Window,
     _coerce,
     WindowFunction,
     BinaryExpression,
@@ -648,7 +650,6 @@ class Select(Expression):
         Returns:
             Explain expression
         """
-        from chorm.sql.explain import Explain
 
         return Explain(self, explain_type=explain_type, settings=settings)
 
@@ -773,7 +774,6 @@ def window(
             func.sum(Order.amount).over(w).label('running_total')
         )
     """
-    from chorm.sql.expression import Window
 
     # Convert partition_by to list
     partition_list = []

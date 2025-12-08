@@ -45,6 +45,7 @@ class AsyncConnectionPool:
         max_overflow: int = 10,
         timeout: float = 30.0,
         recycle: int = 3600,
+        pre_ping: bool = False,
         connect_args: Optional[Dict[str, Any]] = None,
     ):
         if pool_size < 1:
@@ -61,6 +62,7 @@ class AsyncConnectionPool:
         self._max_overflow = max_overflow
         self._timeout = timeout
         self._recycle = recycle
+        self._pre_ping = pre_ping
         self._connect_args = connect_args or {}
 
         # Async queue for pooled connections
@@ -122,6 +124,23 @@ class AsyncConnectionPool:
 
         return conn
 
+    async def _validate_connection(self, conn: AsyncConnection) -> bool:
+        """Validate that a connection is still alive.
+
+        Executes a lightweight query (SELECT 1).
+
+        Args:
+            conn: Connection to validate
+
+        Returns:
+            True if connection is alive, False otherwise
+        """
+        try:
+            await conn.execute("SELECT 1")
+            return True
+        except Exception:
+            return False
+
     async def get(self) -> AsyncConnection:
         """Get a connection from the pool.
 
@@ -145,6 +164,10 @@ class AsyncConnectionPool:
             if self._should_recycle(conn):
                 await conn.close()
                 conn = await self._create_connection()
+            elif self._pre_ping and not await self._validate_connection(conn):
+                 # Connection dead, discard and create new one
+                await conn.close()
+                conn = await self._create_connection()
 
             return conn
 
@@ -163,6 +186,10 @@ class AsyncConnectionPool:
 
                 # Check if connection needs recycling
                 if self._should_recycle(conn):
+                    await conn.close()
+                    conn = await self._create_connection()
+                elif self._pre_ping and not await self._validate_connection(conn):
+                     # Connection dead, discard and create new one
                     await conn.close()
                     conn = await self._create_connection()
 

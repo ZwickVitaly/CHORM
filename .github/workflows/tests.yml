@@ -1,0 +1,67 @@
+name: Run Tests
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Test Suite
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      
+      - name: Start ClickHouse cluster with docker-compose
+        run: |
+          docker compose -f .github/docker-compose.yml up -d
+          echo "Waiting for ClickHouse container to be ready..."
+          for i in {1..60}; do
+            if curl -s http://localhost:8123/ping > /dev/null 2>&1; then
+              echo "ClickHouse is ready!"
+              break
+            fi
+            echo "Attempt $i/60: Waiting for ClickHouse..."
+            sleep 2
+          done
+          docker compose -f .github/docker-compose.yml ps
+          echo ""
+          echo "Checking cluster configuration..."
+          sleep 5
+          docker exec chorm_clickhouse clickhouse-client --query="SELECT * FROM system.clusters WHERE cluster = 'default'" || echo "Cluster default not found"
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest pytest-asyncio clickhouse-connect pandas
+      
+      - name: Install package in development mode
+        run: |
+          pip install -e .
+      
+      - name: Wait for ClickHouse to be ready
+        run: |
+          echo "Checking ClickHouse connectivity..."
+          curl -s http://localhost:8123/ping && echo "✓ ClickHouse is ready"
+      
+      - name: Run tests
+        run: |
+          pytest tests/ -v --tb=short
+        env:
+          CLICKHOUSE_HOST: localhost
+          CLICKHOUSE_PORT: 8123
+          CLICKHOUSE_DB: default
+          CLICKHOUSE_PASSWORD: "123"
+      
+      - name: Stop ClickHouse containers
+        if: always()
+        run: |
+          docker compose -f .github/docker-compose.yml down -v

@@ -82,7 +82,7 @@ class IntrospectDistributedUsers(Table):
     name = Column("String")
     created_at = Column(Date())
     __engine__ = Distributed(
-        cluster="test_cluster",
+        cluster="default",
         database="default",
         table="test_introspect_local_users",
         sharding_key="rand()"
@@ -107,22 +107,7 @@ def engine():
     return engine
 
 
-@pytest.fixture(scope="module")
-def engine_distributed():
-    """Create engine for second ClickHouse instance (for Distributed tests)."""
-    host = os.getenv("CLICKHOUSE_HOST", "localhost")
-    port = int(os.getenv("CLICKHOUSE_DISTRIBUTED_PORT", "8125"))
-    database = os.getenv("CLICKHOUSE_DB", "default")
-    password = os.getenv("CLICKHOUSE_PASSWORD", "123")
 
-    engine = create_engine(
-        host=host,
-        port=port,
-        username="default",
-        password=password,
-        database=database,
-    )
-    return engine
 
 
 @pytest.fixture(scope="module")
@@ -411,72 +396,51 @@ class TestIntrospectionIntegration:
 class TestDistributedIntrospectionIntegration:
     """Integration tests for Distributed table introspection.
     
-    These tests require a second ClickHouse instance to be available.
-    Tests will be skipped if second instance is not accessible.
+    These tests use a local loopback Distributed table (cluster='default').
     """
 
-    @pytest.fixture(scope="module")
-    def check_second_instance_available(self, engine_distributed):
-        """Check if second ClickHouse instance is available.
-        
-        This fixture will skip all tests in this class if second ClickHouse
-        instance is not accessible.
-        """
-        try:
-            session = Session(engine_distributed)
-            session.execute("SELECT 1")
-            session.close()
-        except Exception as e:
-            pytest.skip(f"Second ClickHouse instance is not available (port {engine_distributed.config.port}): {e}. Skipping Distributed table tests.")
-
-    @pytest.fixture(scope="module")
-    def setup_distributed_tables(self, engine, engine_distributed, check_second_instance_available):
-        """Set up Distributed table for testing."""
-        session1 = Session(engine)
-        session2 = Session(engine_distributed)
+    @pytest.fixture(scope="class")
+    def setup_distributed_tables(self, engine, client):
+        """Set up Distributed table for testing using local loopback."""
+        session = Session(engine)
 
         try:
-            # Check if cluster is configured
+            # Check if 'default' cluster is configured
             try:
-                cluster_check = session1.execute(
-                    "SELECT count() FROM system.clusters WHERE cluster = 'test_cluster'"
+                cluster_check = session.execute(
+                    "SELECT count() FROM system.clusters WHERE cluster = 'default'"
                 ).scalar()
                 if cluster_check == 0:
-                    pytest.skip("Cluster 'test_cluster' is not configured. Skipping Distributed table tests.")
+                    pytest.skip("Cluster 'default' is not configured. Skipping Distributed table tests.")
             except Exception as e:
                 pytest.skip(f"Failed to check cluster configuration: {e}. Skipping Distributed table tests.")
 
             # Drop tables if they exist
-            session1.execute(f"DROP TABLE IF EXISTS {IntrospectDistributedUsers.__tablename__}")
-            session1.execute(f"DROP TABLE IF EXISTS {IntrospectLocalUsers.__tablename__}")
-            session2.execute(f"DROP TABLE IF EXISTS {IntrospectLocalUsers.__tablename__}")
+            session.execute(f"DROP TABLE IF EXISTS {IntrospectDistributedUsers.__tablename__}")
+            session.execute(f"DROP TABLE IF EXISTS {IntrospectLocalUsers.__tablename__}")
 
-            # Create local tables on both instances
-            session1.execute(IntrospectLocalUsers.create_table(exists_ok=True))
-            session2.execute(IntrospectLocalUsers.create_table(exists_ok=True))
-
+            # Create local table
+            session.execute(IntrospectLocalUsers.create_table(exists_ok=True))
+            
             # Create Distributed table
             try:
-                session1.execute(IntrospectDistributedUsers.create_table(exists_ok=True))
+                session.execute(IntrospectDistributedUsers.create_table(exists_ok=True))
             except Exception as e:
                 error_msg = str(e)
                 if "CLUSTER_DOESNT_EXIST" in error_msg or "cluster" in error_msg.lower():
-                    pytest.skip(f"Cluster 'test_cluster' not found: {e}. Skipping Distributed table tests.")
+                    pytest.skip(f"Cluster 'default' not found or error: {e}. Skipping Distributed table tests.")
                 raise
 
-            session1.commit()
-            session2.commit()
+            session.commit()
 
             yield
 
         finally:
             # Cleanup
             try:
-                session1.execute(f"DROP TABLE IF EXISTS {IntrospectDistributedUsers.__tablename__}")
-                session1.execute(f"DROP TABLE IF EXISTS {IntrospectLocalUsers.__tablename__}")
-                session2.execute(f"DROP TABLE IF EXISTS {IntrospectLocalUsers.__tablename__}")
-                session1.commit()
-                session2.commit()
+                session.execute(f"DROP TABLE IF EXISTS {IntrospectDistributedUsers.__tablename__}")
+                session.execute(f"DROP TABLE IF EXISTS {IntrospectLocalUsers.__tablename__}")
+                session.commit()
             except Exception:
                 pass
 
@@ -518,4 +482,6 @@ class TestDistributedIntrospectionIntegration:
 
         # Compare with original model
         compare_table_models(IntrospectDistributedUsers, generated_code)
+
+
 

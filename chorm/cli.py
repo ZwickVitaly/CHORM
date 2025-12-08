@@ -13,6 +13,9 @@ from typing import List, Dict, Any
 from chorm.migration import Migration, MigrationManager
 from chorm.session import Session
 from chorm.engine import create_engine
+from chorm.auto_migration import ModelLoader, MigrationGenerator
+from chorm.introspection import TableIntrospector, ModelGenerator
+
 
 MIGRATION_TEMPLATE = """\"\"\"Migration: {name}
 
@@ -330,10 +333,109 @@ def downgrade(args):
         print(f"Downgraded to revision: {manager.get_current_revision() or 'base'}")
 
 
+def auto_migrate(args):
+    """Automatically generate migration by comparing models with database."""
+
+    cwd = Path.cwd()
+    config = load_config(cwd)
+    migrations_dir = cwd / config.get("migrations", {}).get("directory", "migrations")
+
+    if not migrations_dir.exists():
+        print("Error: migrations directory not found. Run 'chorm init' first.")
+        sys.exit(1)
+
+    # Get models path
+    models_path = Path(args.models) if args.models else cwd
+    if not models_path.exists():
+        print(f"Error: models path '{models_path}' not found.")
+        sys.exit(1)
+
+    # Get database connection info
+    db_config = config.get("chorm", {})
+    host = args.host or db_config.get("host", "localhost")
+    port = args.port or db_config.get("port", 8123)
+    database = args.database or db_config.get("database", "default")
+    user = args.user or db_config.get("user", "default")
+    password = args.password or db_config.get("password", "")
+
+    print(f"Scanning for models in: {models_path}")
+    print(f"Connecting to ClickHouse at {host}:{port}...")
+
+    try:
+        # Load models
+        loader = ModelLoader()
+        model_tables = loader.find_all_models(models_path)
+        
+        if not model_tables:
+            print(f"No Table classes found in {models_path}")
+            sys.exit(1)
+
+        print(f"Found {len(model_tables)} table model(s): {', '.join(sorted(model_tables.keys()))}")
+
+        # Connect to database
+        client = clickhouse_connect.get_client(
+            host=host, port=port, username=user, password=password, database=database
+        )
+
+        # Get database tables
+        introspector = TableIntrospector(client)
+        db_tables = introspector.get_tables(database)
+        print(f"Found {len(db_tables)} table(s) in database: {', '.join(sorted(db_tables)) if db_tables else '(none)'}")
+
+        # Compare and generate diffs
+        generator = MigrationGenerator(introspector, database)
+        diffs = generator.compare_tables(model_tables, db_tables)
+
+        if not diffs:
+            print("\n✓ No differences found. Database is in sync with models.")
+            client.close()
+            return
+
+        print(f"\nFound {len(diffs)} difference(s):")
+        for diff in diffs:
+            if diff.action == "create":
+                print(f"  + Create table: {diff.table_name}")
+            elif diff.action == "alter":
+                print(f"  ~ Alter table: {diff.table_name} ({len(diff.column_diffs)} column change(s))")
+            elif diff.action == "drop":
+                print(f"  - Drop table: {diff.table_name}")
+
+        # Generate migration
+        migration_name = args.message or "auto_migration"
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+        # Find latest migration for down_revision
+        existing_files = sorted([f for f in migrations_dir.glob("*.py") if f.name != "__init__.py"])
+        down_revision = "None"
+        if existing_files:
+            last_file = existing_files[-1]
+            # Try to extract timestamp from filename (first part before _)
+            parts = last_file.stem.split("_")
+            if parts:
+                down_revision = f'"{parts[0]}"'
+
+        migration_code = generator.generate_migration_code(diffs, migration_name, timestamp, down_revision)
+
+        # Write migration file
+        filename = f"{timestamp}_{migration_name.replace(' ', '_').lower()}.py"
+        filepath = migrations_dir / filename
+        filepath.write_text(migration_code)
+
+        print(f"\n✓ Created migration file: {filepath}")
+        print(f"  Review and adjust the migration before applying it with 'chorm migrate'")
+
+        client.close()
+
+    except Exception as e:
+        print(f"Error: {e}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
+
+
 def introspect(args):
     """Introspect database and generate model classes."""
-    from chorm.introspection import TableIntrospector, ModelGenerator
-    import clickhouse_connect
+
 
     # Try to load config, but don't fail if it doesn't exist
     try:
@@ -436,6 +538,21 @@ def main():
     downgrade_parser = subparsers.add_parser("downgrade", help="Rollback migrations")
     downgrade_parser.add_argument("--steps", type=int, default=1, help="Number of migrations to rollback (default: 1)")
     downgrade_parser.set_defaults(func=downgrade)
+
+    # auto-migrate command
+    auto_migrate_parser = subparsers.add_parser(
+        "auto-migrate", help="Automatically generate migration by comparing models with database"
+    )
+    auto_migrate_parser.add_argument(
+        "--models", help="Path to models directory or file (default: current directory)", default=None
+    )
+    auto_migrate_parser.add_argument("-m", "--message", help="Migration message/name", default="auto_migration")
+    auto_migrate_parser.add_argument("--host", help="ClickHouse host (default: from config or localhost)")
+    auto_migrate_parser.add_argument("--port", type=int, help="ClickHouse port (default: from config or 8123)")
+    auto_migrate_parser.add_argument("--database", help="Database name (default: from config or 'default')")
+    auto_migrate_parser.add_argument("--user", help="Database user (default: from config or 'default')")
+    auto_migrate_parser.add_argument("--password", help="Database password (default: from config or empty)")
+    auto_migrate_parser.set_defaults(func=auto_migrate)
 
     # introspect command
     introspect_parser = subparsers.add_parser("introspect", help="Generate models from existing database tables")

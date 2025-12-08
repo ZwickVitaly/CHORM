@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional, Sequence, Union
 
 from chorm.sql.expression import Expression, _coerce
+import re
 
 
 class Insert(Expression):
@@ -186,7 +187,7 @@ class Update(Expression):
         ClickHouse ALTER TABLE UPDATE/DELETE don't support table-qualified column names.
         Converts 'table.column' to 'column' in WHERE clauses.
         """
-        import re
+
         # Replace table.column with just column
         # Pattern: table_name.column_name (with word boundaries)
         pattern = rf'\b{re.escape(table_name)}\.(\w+)\b'

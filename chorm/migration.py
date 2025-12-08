@@ -1,13 +1,22 @@
+
 """Core migration logic for CHORM."""
 
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import List, Optional
+from typing import TYPE_CHECKING, Any, List, Optional
 from datetime import datetime
 
 from chorm.session import Session
 from chorm.sql import select, insert, delete
+from chorm.sql.ddl import (
+    add_column,
+    drop_column,
+    modify_column,
+    rename_column,
+    add_index,
+    drop_index,
+)
 from chorm.sql.expression import Identifier, Literal
 
 
@@ -51,7 +60,6 @@ class Migration(ABC):
         Example:
             self.add_column(session, User, "age UInt8", after="name")
         """
-        from chorm.sql.ddl import add_column
 
         stmt = add_column(table, column_def, **kwargs)
         self.execute_ddl(session, stmt)
@@ -68,7 +76,6 @@ class Migration(ABC):
         Example:
             self.drop_column(session, User, "old_field")
         """
-        from chorm.sql.ddl import drop_column
 
         stmt = drop_column(table, column_name, **kwargs)
         self.execute_ddl(session, stmt)
@@ -85,7 +92,6 @@ class Migration(ABC):
         Example:
             self.modify_column(session, User, "age UInt16")
         """
-        from chorm.sql.ddl import modify_column
 
         stmt = modify_column(table, column_def, **kwargs)
         self.execute_ddl(session, stmt)
@@ -103,7 +109,6 @@ class Migration(ABC):
         Example:
             self.rename_column(session, User, "old_name", "new_name")
         """
-        from chorm.sql.ddl import rename_column
 
         stmt = rename_column(table, old_name, new_name, **kwargs)
         self.execute_ddl(session, stmt)
@@ -122,7 +127,6 @@ class Migration(ABC):
             from chorm.sql.expression import Identifier
             self.add_index(session, User, "idx_email", Identifier("email"), index_type="bloom_filter")
         """
-        from chorm.sql.ddl import add_index
 
         stmt = add_index(table, name, expression, **kwargs)
         self.execute_ddl(session, stmt)
@@ -139,7 +143,6 @@ class Migration(ABC):
         Example:
             self.drop_index(session, User, "idx_email")
         """
-        from chorm.sql.ddl import drop_index
 
         stmt = drop_index(table, name, **kwargs)
         self.execute_ddl(session, stmt)

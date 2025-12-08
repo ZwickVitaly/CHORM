@@ -22,21 +22,20 @@ jobs:
       - name: Start ClickHouse cluster with docker-compose
         run: |
           docker compose -f .github/docker-compose.yml up -d
-          echo "Waiting for ClickHouse containers to be ready..."
+          echo "Waiting for ClickHouse container to be ready..."
           for i in {1..60}; do
-            if curl -s http://localhost:8123/ping > /dev/null 2>&1 && curl -s http://localhost:8125/ping > /dev/null 2>&1; then
-              echo "Both ClickHouse instances are ready!"
+            if curl -s http://localhost:8123/ping > /dev/null 2>&1; then
+              echo "ClickHouse is ready!"
               break
             fi
-            echo "Attempt $i/60: Waiting for ClickHouse containers..."
+            echo "Attempt $i/60: Waiting for ClickHouse components..."
             sleep 2
           done
           docker compose -f .github/docker-compose.yml ps
           echo ""
           echo "Checking cluster configuration..."
           sleep 5
-          docker exec chorm_clickhouse clickhouse-client --query="SELECT * FROM system.clusters WHERE cluster = 'test_cluster'" || echo "Cluster not found yet"
-          docker exec chorm_clickhouse_distributed clickhouse-client --query="SELECT * FROM system.clusters WHERE cluster = 'test_cluster'" || echo "Cluster not found yet"
+          docker exec chorm_clickhouse clickhouse-client --query="SELECT * FROM system.clusters WHERE cluster = 'default'" || echo "Cluster default not found"
       
       - name: Install dependencies
         run: |
@@ -50,8 +49,7 @@ jobs:
       - name: Wait for ClickHouse to be ready
         run: |
           echo "Checking ClickHouse connectivity..."
-          curl -s http://localhost:8123/ping && echo "✓ First ClickHouse is ready"
-          curl -s http://localhost:8125/ping && echo "✓ Second ClickHouse is ready"
+          curl -s http://localhost:8123/ping && echo "✓ ClickHouse is ready"
       
       - name: Run tests
         run: |
@@ -59,7 +57,6 @@ jobs:
         env:
           CLICKHOUSE_HOST: localhost
           CLICKHOUSE_PORT: 8123
-          CLICKHOUSE_DISTRIBUTED_PORT: 8125
           CLICKHOUSE_DB: default
           CLICKHOUSE_PASSWORD: "123"
       

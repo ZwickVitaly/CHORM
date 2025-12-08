@@ -15,7 +15,8 @@ from datetime import date as _date, datetime as _datetime
 from decimal import Decimal as _Decimal, ROUND_HALF_UP, getcontext, localcontext
 from ipaddress import IPv4Address, IPv6Address, ip_address
 import json
-from typing import Any, Callable, Dict, Iterable, List, Mapping, Sequence, Tuple, Union
+from chorm.sql.expression import FunctionCall, Literal, _FunctionFactory
+from typing import Any, Dict, List, Optional, Tuple, Type, Mapping, Sequence, Union, Iterable
 from uuid import UUID as _UUID
 from zoneinfo import ZoneInfo
 
@@ -611,7 +612,6 @@ class AggregateFunctionType(FieldType):
             func_name = func_or_name
         else:
             # Try to get name from _FunctionFactory (e.g., func.sum)
-            from chorm.sql.expression import _FunctionFactory
             if isinstance(func_or_name, _FunctionFactory):
                 func_name = func_or_name.name
             elif hasattr(func_or_name, 'name'):

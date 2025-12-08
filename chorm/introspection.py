@@ -3,6 +3,7 @@
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 import clickhouse_connect
+import re
 
 
 class TableIntrospector:
@@ -64,7 +65,8 @@ class TableIntrospector:
                 type,
                 default_kind,
                 default_expression,
-                comment
+                comment,
+                compression_codec
             FROM system.columns
             WHERE database = '{database}' AND table = '{table}'
             ORDER BY position
@@ -80,6 +82,7 @@ class TableIntrospector:
                     "default_kind": row[2],
                     "default_expression": row[3],
                     "comment": row[4],
+                    "codec": row[5],
                 }
             )
 
@@ -120,7 +123,9 @@ class ModelGenerator:
     def __init__(self):
         """Initialize model generator."""
         self.imports = set()
+
         self.engines_used = set()  # Track which engines are used
+        self.codecs_used = set()  # Track which codecs are used
 
     def map_type(self, ch_type: str) -> str:
         """Map ClickHouse type to CHORM type."""
@@ -182,7 +187,6 @@ class ModelGenerator:
         ):
             self.imports.add("Decimal")
             # Extract precision and scale if possible
-            import re
 
             match = re.search(r"Decimal\d*\((\d+),\s*(\d+)\)", ch_type)
             if match:
@@ -300,6 +304,23 @@ class ModelGenerator:
             # Column comment is separate
             column_comment = f"  # {col['comment']}" if col["comment"] else ""
             
+            # Handle codec
+            codec_arg = ""
+            if col.get("codec"):
+                # ClickHouse returns CODEC(ZSTD(1)), we need to extract ZSTD(1)
+                codec_val = col["codec"]
+                if codec_val.startswith("CODEC(") and codec_val.endswith(")"):
+                     codec_val = codec_val[6:-1]
+                
+                # Only add if not empty
+                if codec_val:
+                    # Parse codec string to Python expression
+                    codec_expr = self._parse_codec_expression(codec_val)
+                    if codec_expr:
+                         codec_arg = f', codec={codec_expr}'
+                    else:
+                         codec_arg = f', codec="{codec_val}"' # Fallback to string if parsing fails or unknown
+            
             # Check if col_type already has a comment (from TODO in map_type)
             if "  # TODO:" in col_type:
                 # Split type expression and comment
@@ -308,17 +329,17 @@ class ModelGenerator:
                 # Ensure type_expr has closing paren
                 if not type_expr.endswith(")"):
                     type_expr = type_expr + ")"
-                # Combine: Column(type_expr) + todo_comment + column_comment
+                # Combine: Column(type_expr, codec="...") + todo_comment + column_comment
                 if column_comment:
-                    lines.append(f"    {col['name']} = Column({type_expr}){todo_comment}{column_comment}")
+                     lines.append(f"    {col['name']} = Column({type_expr}{codec_arg}){todo_comment}{column_comment}")
                 else:
-                    lines.append(f"    {col['name']} = Column({type_expr}){todo_comment}")
+                     lines.append(f"    {col['name']} = Column({type_expr}{codec_arg}){todo_comment}")
             else:
                 # No TODO comment, just use col_type as-is
                 # Ensure proper closing paren
                 if not col_type.endswith(")"):
                     col_type = col_type + ")"
-                lines.append(f"    {col['name']} = Column({col_type}){column_comment}")
+                lines.append(f"    {col['name']} = Column({col_type}{codec_arg}){column_comment}")
 
         return "\n".join(lines)
 
@@ -617,6 +638,50 @@ class ModelGenerator:
             mapped_name = func_map.get(func_name, func_name)
             return f"func.{mapped_name}"
 
+    def _parse_codec_expression(self, codec_str: str) -> Optional[str]:
+        """Parse codec string into Python expression logic.
+        
+        Example: 
+            "Delta(8), ZSTD(1)" -> "Delta(8) | ZSTD(1)"
+            "LZ4" -> "LZ4()"
+        """
+        # Reuse _parse_distributed_args to split by comma respecting parens
+        parts = self._parse_distributed_args(codec_str)
+        if not parts:
+            return None
+
+        # Known codecs in chorm.codecs (names only)
+        # Using string mapping to check validity
+        known_codecs = {
+            "ZSTD", "LZ4", "LZ4HC", "Delta", "DoubleDelta", 
+            "Gorilla", "T64", "FPC", "NONE"
+        }
+        
+        expr_parts = []
+        for part in parts:
+            part = part.strip()
+            # Check structure: Name or Name(...)
+            match = re.match(r"^(\w+)(?:\((.*)\))?$", part)
+            if not match:
+                return None # Unknown format
+            
+            name = match.group(1)
+            args = match.group(2)
+            
+            if name not in known_codecs:
+                return None # Unknown codec, fallback to string
+
+            self.codecs_used.add(name)
+            
+            if args is not None:
+                # Validate args? For now assume they are literals
+                expr_parts.append(f"{name}({args})")
+            else:
+                # No args, instantiate as Name()
+                expr_parts.append(f"{name}()")
+        
+        return " | ".join(expr_parts)
+
     def generate_imports(self) -> str:
         """Generate import statements."""
         lines = []
@@ -642,7 +707,12 @@ class ModelGenerator:
         if "AggregatingMergeTree" in self.engines_used:
             engine_list.append("AggregatingMergeTree")
         
+        
         lines.append(f"from chorm.table_engines import {', '.join(sorted(set(engine_list)))}")
+        
+        # Codec imports
+        if self.codecs_used:
+             lines.append(f"from chorm.codecs import {', '.join(sorted(self.codecs_used))}")
 
         return "\n".join(lines)
 
