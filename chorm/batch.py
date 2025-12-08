@@ -11,6 +11,7 @@ from chorm.batch_optimized import (
     ClickHouseBatchInsertFromDataFrame,
     bulk_insert as _optimized_bulk_insert,
 )
+from chorm.utils import escape_string
 
 logger = logging.getLogger(__name__)
 
@@ -115,9 +116,8 @@ class BatchInsert:
                 if value is None:
                     formatted_values.append("NULL")
                 elif isinstance(value, str):
-                    # Escape single quotes
-                    escaped = value.replace("'", "\\'")
-                    formatted_values.append(f"'{escaped}'")
+                    # Robust escaping
+                    formatted_values.append(f"'{_escape_string(value)}'")
                 elif isinstance(value, (list, tuple)):
                     # Array type
                     formatted_values.append(str(list(value)))
@@ -228,8 +228,7 @@ class BatchUpdate:
                 if value is None:
                     set_parts.append(f"{col} = NULL")
                 elif isinstance(value, str):
-                    escaped = value.replace("'", "\\'")
-                    set_parts.append(f"{col} = '{escaped}'")
+                    set_parts.append(f"{col} = '{_escape_string(value)}'")
                 else:
                     set_parts.append(f"{col} = {value}")
 

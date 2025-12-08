@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "clickhouse-chorm"
-version = "0.1.4"
+version = "0.1.5"
 description = "A modern, type-safe ORM for ClickHouse with full support for ClickHouse-specific features"
 readme = "README.md"
 requires-python = ">=3.12"

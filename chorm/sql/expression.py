@@ -120,13 +120,15 @@ class Identifier(Expression):
         return self.name
 
 
+from chorm.utils import escape_string
+
 @dataclass(frozen=True)
 class Literal(Expression):
     value: Any
 
     def to_sql(self) -> str:
         if isinstance(self.value, str):
-            return f"'{self.value}'"  # Basic escaping, should be improved
+            return f"'{escape_string(self.value)}'"
         if self.value is None:
             return "NULL"
         if isinstance(self.value, bool):

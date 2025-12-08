@@ -5,6 +5,16 @@ All notable changes to CHORM will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.5] - 2025-12-09
+
+### Security
+- **Critical**: Fixed SQL Injection vulnerabilities in `Insert`, `Update`, `Delete` statements where string literals were not properly escaped.
+- **Critical**: Fixed SQL Injection vulnerability in legacy `BatchInsert` and `BatchUpdate` classes.
+- **Medium**: Fixed Path Traversal vulnerability in migration CLI commands (`make-migration`, `auto-migrate`).
+- **Medium**: Fixed potential SQL Injection in table introspection (system table queries).
+- **Hardening**: Implemented password masking in `EngineConfig` string representation to prevent accidental credential leakage in logs.
+- **Hardening**: Added support for parameterized queries in `Session.execute()` to encourage safe coding practices.
+
 ## [0.1.4] - 2025-12-09
 
 ### Added

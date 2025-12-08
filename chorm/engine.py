@@ -192,6 +192,17 @@ class EngineConfig:
 
         return config, extra_args
 
+    def __repr__(self) -> str:
+        """Mask password in string representation."""
+        # Create a copy of dict to modify password
+        d = self.__dict__.copy()
+        if d.get("password"):
+            d["password"] = "******"
+        
+        # Format like standard dataclass repr
+        field_strs = [f"{k}={repr(v)}" for k, v in d.items()]
+        return f"{self.__class__.__name__}({', '.join(field_strs)})"
+
 
 class Engine:
     """Factory for `clickhouse_connect.driver.client.Client` instances.

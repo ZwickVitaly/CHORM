@@ -18,17 +18,33 @@ class Session:
         self.bind = bind
         self._pending_inserts: Dict[Type[Table], List[Table]] = {}
 
-    def execute(self, statement: Any) -> Result:
-        """Execute a SQL statement."""
+    def execute(self, statement: Any, parameters: Optional[Dict[str, Any]] = None) -> Result:
+        """Execute a SQL statement.
+        
+        Args:
+            statement: SQL statement (string or selectable/DML object)
+            parameters: Optional dictionary of parameters for the query
+            
+        Returns:
+            Result object
+        """
         if isinstance(statement, Select):
             sql = statement.to_sql()
             # TODO: Infer model from Select statement for automatic mapping
-            raw_result = self.bind.query(sql)
+            # Note: Select.to_sql() inlines values, so parameters might not be used if passed here
+            # But if statement is a raw string with %(param)s, parameters will work.
+            if parameters:
+                 raw_result = self.bind.query(sql, parameters=parameters)
+            else:
+                 raw_result = self.bind.query(sql)
             return Result(raw_result)
 
         elif isinstance(statement, (Insert, Update, Delete)):
             sql = statement.to_sql()
-            self.bind.execute(sql)
+            if parameters:
+                self.bind.execute(sql, parameters=parameters)
+            else:
+                self.bind.execute(sql)
             return Result(None)
 
         else:
@@ -43,9 +59,14 @@ class Session:
                 or upper_sql.startswith("DESCRIBE")
                 or upper_sql.startswith("EXPLAIN")
             ):
+                if parameters:
+                    return Result(self.bind.query(sql, parameters=parameters))
                 return Result(self.bind.query(sql))
             else:
-                self.bind.execute(sql)
+                if parameters:
+                    self.bind.execute(sql, parameters=parameters)
+                else:
+                    self.bind.execute(sql)
                 return Result(None)
 
     def add(self, instance: Table) -> None:

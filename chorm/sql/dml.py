@@ -8,6 +8,16 @@ from chorm.sql.expression import Expression, _coerce
 import re
 
 
+from chorm.utils import escape_string
+
+def _escape_string(value: str) -> str:
+    """Escape string value for SQL literal.
+    
+    DEPRECATED: Use chorm.utils.escape_string instead.
+    """
+    return escape_string(value)
+
+
 class Insert(Expression):
     """Represents an INSERT statement."""
 
@@ -77,7 +87,7 @@ class Insert(Expression):
                 for k, v in self._settings.items():
                     val_str = str(v)
                     if isinstance(v, str):
-                        val_str = f"'{v}'"
+                        val_str = f"'{_escape_string(v)}'"
                     settings_list.append(f"{k}={val_str}")
                 sql += f" SETTINGS {', '.join(settings_list)}"
 
@@ -99,7 +109,7 @@ class Insert(Expression):
                 val = row.get(k)
                 # Basic escaping
                 if isinstance(val, str):
-                    row_vals.append(f"'{val}'")
+                    row_vals.append(f"'{_escape_string(val)}'")
                 elif val is None:
                     row_vals.append("NULL")
                 else:
@@ -115,9 +125,10 @@ class Insert(Expression):
             for k, v in self._settings.items():
                 val_str = str(v)
                 if isinstance(v, str):
-                    val_str = f"'{v}'"
+                    val_str = f"'{_escape_string(v)}'"
                 settings_list.append(f"{k}={val_str}")
             sql += f" SETTINGS {', '.join(settings_list)}"
+
 
         return sql
 
@@ -174,7 +185,7 @@ class Update(Expression):
             for k, v in self._settings.items():
                 val_str = str(v)
                 if isinstance(v, str):
-                    val_str = f"'{v}'"
+                    val_str = f"'{_escape_string(v)}'"
                 settings_list.append(f"{k}={val_str}")
             sql += f" SETTINGS {', '.join(settings_list)}"
 
@@ -230,7 +241,7 @@ class Delete(Expression):
             for k, v in self._settings.items():
                 val_str = str(v)
                 if isinstance(v, str):
-                    val_str = f"'{v}'"
+                    val_str = f"'{_escape_string(v)}'"
                 settings_list.append(f"{k}={val_str}")
             sql += f" SETTINGS {', '.join(settings_list)}"
 

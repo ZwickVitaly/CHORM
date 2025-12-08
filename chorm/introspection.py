@@ -15,20 +15,20 @@ class TableIntrospector:
 
     def get_tables(self, database: str = "default") -> List[str]:
         """Get list of all tables in database."""
-        query = f"""
+        query = """
             SELECT name 
             FROM system.tables 
-            WHERE database = '{database}' 
+            WHERE database = %(database)s 
             AND engine NOT LIKE '%View%'
             ORDER BY name
         """
-        result = self.client.query(query)
+        result = self.client.query(query, parameters={"database": database})
         return [row[0] for row in result.result_rows]
 
     def get_table_info(self, table: str, database: str = "default") -> Dict[str, Any]:
         """Get complete table information."""
         # Get table metadata
-        query = f"""
+        query = """
             SELECT 
                 engine,
                 engine_full,
@@ -36,9 +36,9 @@ class TableIntrospector:
                 sorting_key,
                 primary_key
             FROM system.tables
-            WHERE database = '{database}' AND name = '{table}'
+            WHERE database = %(database)s AND name = %(table)s
         """
-        result = self.client.query(query)
+        result = self.client.query(query, parameters={"database": database, "table": table})
         if not result.result_rows:
             raise ValueError(f"Table {table} not found in database {database}")
 
@@ -59,7 +59,7 @@ class TableIntrospector:
 
     def get_columns(self, table: str, database: str = "default") -> List[Dict[str, Any]]:
         """Get column definitions for a table."""
-        query = f"""
+        query = """
             SELECT 
                 name,
                 type,
@@ -68,10 +68,10 @@ class TableIntrospector:
                 comment,
                 compression_codec
             FROM system.columns
-            WHERE database = '{database}' AND table = '{table}'
+            WHERE database = %(database)s AND table = %(table)s
             ORDER BY position
         """
-        result = self.client.query(query)
+        result = self.client.query(query, parameters={"database": database, "table": table})
 
         columns = []
         for row in result.result_rows:
