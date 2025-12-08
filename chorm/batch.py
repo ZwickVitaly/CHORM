@@ -117,7 +117,7 @@ class BatchInsert:
                     formatted_values.append("NULL")
                 elif isinstance(value, str):
                     # Robust escaping
-                    formatted_values.append(f"'{_escape_string(value)}'")
+                    formatted_values.append(f"'{escape_string(value)}'")
                 elif isinstance(value, (list, tuple)):
                     # Array type
                     formatted_values.append(str(list(value)))
@@ -228,7 +228,7 @@ class BatchUpdate:
                 if value is None:
                     set_parts.append(f"{col} = NULL")
                 elif isinstance(value, str):
-                    set_parts.append(f"{col} = '{_escape_string(value)}'")
+                    set_parts.append(f"{col} = '{escape_string(value)}'")
                 else:
                     set_parts.append(f"{col} = {value}")
 

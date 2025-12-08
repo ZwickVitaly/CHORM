@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.1.5] - 2025-12-09
 
+### Fixed
+- **Regression**: Fixed `NameError: name '_escape_string' is not defined` in deprecated `BatchInsert` and `BatchUpdate` classes.
+
 ### Security
 - **Critical**: Fixed SQL Injection vulnerabilities in `Insert`, `Update`, `Delete` statements where string literals were not properly escaped.
 - **Critical**: Fixed SQL Injection vulnerability in legacy `BatchInsert` and `BatchUpdate` classes.
