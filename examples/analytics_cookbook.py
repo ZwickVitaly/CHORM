@@ -12,15 +12,19 @@ It covers real-world scenarios like:
 
 import os
 from datetime import date, timedelta
-from chorm import Table, Column, MergeTree, select, insert, create_engine
+from chorm import Table, Column, MergeTree, select, insert, create_engine, MetaData
 from chorm.session import Session
 from chorm.types import UInt64, String, Date, Float64, DateTime
 from chorm.sql.expression import Identifier, Literal, func
 
 
+metadata = MetaData()
+
+
 # --- Models ---
 
 class UserEvent(Table):
+    metadata = metadata
     __tablename__ = "events_cookbook"
     user_id = Column(UInt64())
     event_type = Column(String())  # 'signup', 'view_item', 'add_to_cart', 'purchase'
@@ -48,8 +52,9 @@ def get_session():
 
 
 def setup_data(session):
-    session.execute(f"DROP TABLE IF EXISTS {UserEvent.__tablename__}")
-    session.execute(UserEvent.create_table())
+    # Using metadata to create table
+    metadata.drop_all(session.engine)
+    metadata.create_all(session.engine)
     
     # Generate some dummy data
     # Cohort 1: Jan 1st
@@ -77,8 +82,9 @@ def setup_data(session):
     # User 1 returns on Jan 2 (Retention)
     events.append(UserEvent(user_id=1, event_type="view_item", timestamp=next_day, amount=0))
 
+    # Bulk insert using ORM session (efficient batching)
     for e in events:
-        session.execute(insert(UserEvent).values(**e.to_dict()))
+        session.add(e)
     session.commit()
     print("Data setup complete.")
 

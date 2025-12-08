@@ -48,7 +48,7 @@ class ModelLoader:
 
     @staticmethod
     def find_table_classes_in_module(module_path: Path) -> List[Type[Table]]:
-        """Find all Table subclasses in a Python module."""
+        """Find all Table subclasses in a Python module, utilizing metadata registry."""
         if not module_path.exists():
             return []
 
@@ -74,6 +74,11 @@ class ModelLoader:
                 del sys.modules[unique_name]
             return []
 
+        # After loading, we can check if any tables were registered in metadata
+        # But since we are loading modules dynamically, we rely on the side effect of class definition
+        # which registers the table in the Metadata.
+        
+        # However, to be compatible with explicit returns, we can still inspect module attributes.
         table_classes = []
         for attr_name in dir(module):
             attr = getattr(module, attr_name)
@@ -120,7 +125,7 @@ class MigrationGenerator:
         self.database = database
 
     def compare_tables(
-        self, model_tables: Dict[str, Type[Table]], db_tables: List[str]
+        self, model_tables: Dict[str, TableMetadata], db_tables: List[str]
     ) -> List[TableDiff]:
         """Compare model tables with database tables and generate diffs."""
         db_table_set = set(db_tables)
@@ -130,7 +135,7 @@ class MigrationGenerator:
 
         # Tables to create (in models but not in DB)
         for table_name in model_table_set - db_table_set:
-            model_metadata = model_tables[table_name].__table__
+            model_metadata = model_tables[table_name]
             diffs.append(
                 TableDiff(
                     table_name=table_name,
@@ -140,18 +145,21 @@ class MigrationGenerator:
                 )
             )
 
-        # Tables to drop (in DB but not in models) - usually skipped in auto-migration
-        # Uncomment if you want to support dropping tables
-        # for table_name in db_table_set - model_table_set:
-        #     db_info = self.introspector.get_table_info(table_name, self.database)
-        #     diffs.append(
-        #         TableDiff(
-        #             table_name=table_name,
-        #             action="drop",
-        #             db_info=db_info,
-        #             column_diffs=[],
-        #         )
-        #     )
+        # Tables to drop (in DB but not in models)
+        for table_name in db_table_set - model_table_set:
+            # Check if it's a migration table or system table, although introspection usually filters system tables
+            if table_name == "chorm_migrations":
+                continue
+                
+            db_info = self.introspector.get_table_info(table_name, self.database)
+            diffs.append(
+                TableDiff(
+                    table_name=table_name,
+                    action="drop",
+                    db_info=db_info,
+                    column_diffs=[],
+                )
+            )
 
         # Tables to alter (in both)
         for table_name in model_table_set & db_table_set:
@@ -163,9 +171,8 @@ class MigrationGenerator:
 
         return diffs
 
-    def _compare_table(self, model_class: Type[Table], table_name: str) -> Optional[TableDiff]:
+    def _compare_table(self, model_metadata: TableMetadata, table_name: str) -> Optional[TableDiff]:
         """Compare a single model table with its database state."""
-        model_metadata = model_class.__table__
         db_info = self.introspector.get_table_info(table_name, self.database)
 
         column_diffs = self._compare_columns(model_metadata, db_info)
@@ -204,16 +211,15 @@ class MigrationGenerator:
                 )
             )
 
-        # Columns to drop (in DB but not in model) - usually skipped
-        # Uncomment if you want to support dropping columns
-        # for col_name in db_col_names - model_col_names:
-        #     diffs.append(
-        #         ColumnDiff(
-        #             name=col_name,
-        #             action="drop",
-        #             db_column=db_columns[col_name],
-        #         )
-        #     )
+        # Columns to drop (in DB but not in model)
+        for col_name in db_col_names - model_col_names:
+            diffs.append(
+                ColumnDiff(
+                    name=col_name,
+                    action="drop",
+                    db_column=db_columns[col_name],
+                )
+            )
 
         # Columns to modify (in both, but different)
         for col_name in model_col_names & db_col_names:
@@ -243,7 +249,14 @@ class MigrationGenerator:
         model_type = model_type.strip().replace(" ", "")
         db_type = db_type.strip().replace(" ", "")
 
-        # Handle Nullable wrapping
+        # Handle Nullable behavior in ClickHouse vs CHORM
+        # CHORM might explicitly say "Nullable(String)", DB says "Nullable(String)" -> Match
+        # CHORM says "String" (nullable=True), DB says "Nullable(String)" -> Match logic needs to be aware of this?
+        # IMPORTANT: CHORM Declarative types usually include Nullable(...) in the string if they are nullable,
+        # because the type instance .to_clickhouse() includes it.
+        # But let's handle the string parsing carefully.
+
+        # Handle Nullable wrapping mismatch
         if model_type.startswith("Nullable(") and not db_type.startswith("Nullable("):
             # Compare inner types
             inner_model = model_type[9:-1]  # Remove Nullable(...)
@@ -302,6 +315,12 @@ class MigrationGenerator:
                     upgrade_lines.append('        """)')
                 upgrade_lines.append("")
 
+            elif diff.action == "drop":
+                 # DROP TABLE
+                upgrade_lines.append(f"        # Drop table {diff.table_name}")
+                upgrade_lines.append(f"        session.execute('DROP TABLE IF EXISTS {diff.table_name}')")
+                upgrade_lines.append("")
+
             elif diff.action == "alter":
                 # ALTER TABLE operations
                 upgrade_lines.append(f"        # Alter table {diff.table_name}")
@@ -311,12 +330,22 @@ class MigrationGenerator:
                         col_def = f"{col.column.ch_type}"
                         if col.column.default is not None:
                             col_def += f" DEFAULT {col.column.default!r}"
+                        # Check for codec
+                        if hasattr(col.column, 'codec') and col.column.codec:
+                            col_def += f" CODEC({col.column.codec})"
                         upgrade_lines.append(
                             f"        self.add_column(session, '{diff.table_name}', '{col_diff.name} {col_def}')"
+                        )
+                    elif col_diff.action == "drop":
+                        upgrade_lines.append(
+                            f"        self.drop_column(session, '{diff.table_name}', '{col_diff.name}')"
                         )
                     elif col_diff.action == "modify":
                         col = col_diff.model_column
                         col_def = f"{col.column.ch_type}"
+                        # Check for codec
+                        if hasattr(col.column, 'codec') and col.column.codec:
+                            col_def += f" CODEC({col.column.codec})"
                         upgrade_lines.append(
                             f"        self.modify_column(session, '{diff.table_name}', '{col_diff.name} {col_def}')"
                         )
@@ -335,6 +364,13 @@ class MigrationGenerator:
             if diff.action == "create":
                 downgrade_lines.append(f"        # Drop table {diff.table_name}")
                 downgrade_lines.append(f"        session.execute('DROP TABLE IF EXISTS {diff.table_name}')")
+            
+            elif diff.action == "drop":
+                # Re-create table (Hard to reconstruct perfectly without model)
+                downgrade_lines.append(f"        # TODO: Manually restore table {diff.table_name}")
+                # We can try to provide a best-effort from db_info, but it's risky.
+                # Just commenting it out or putting a placeholder is safer.
+                downgrade_lines.append(f"        # session.execute('CREATE TABLE {diff.table_name} ...')")
 
             elif diff.action == "alter":
                 downgrade_lines.append(f"        # Revert changes to table {diff.table_name}")
@@ -343,9 +379,23 @@ class MigrationGenerator:
                         downgrade_lines.append(
                             f"        self.drop_column(session, '{diff.table_name}', '{col_diff.name}')"
                         )
+                    elif col_diff.action == "drop" and col_diff.db_column:
+                        # Restore dropped column
+                        db_type = col_diff.db_column["type"]
+                        # Restore codec if available
+                        if col_diff.db_column.get("codec"):
+                            db_type += f" CODEC({col_diff.db_column['codec']})"
+                            
+                        downgrade_lines.append(
+                            f"        self.add_column(session, '{diff.table_name}', '{col_diff.name} {db_type}')"
+                        )
                     elif col_diff.action == "modify" and col_diff.db_column:
                         # Restore original type
                         db_type = col_diff.db_column["type"]
+                        # Restore codec if available
+                        if col_diff.db_column.get("codec"):
+                             db_type += f" CODEC({col_diff.db_column['codec']})"
+
                         downgrade_lines.append(
                             f"        self.modify_column(session, '{diff.table_name}', '{col_diff.name} {db_type}')"
                         )

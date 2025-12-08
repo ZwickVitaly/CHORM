@@ -13,6 +13,7 @@ from chorm.types import FieldType, NullableType, parse_type
 from chorm.sql.expression import Expression
 from chorm.ddl import format_ddl
 from chorm.codecs import Codec
+from chorm.metadata import MetaData
 from chorm.exceptions import ConfigurationError, ValidationError
 from chorm.validators import Validator, validate_value
 
@@ -22,6 +23,8 @@ DeclarativeError = ConfigurationError
 
 class Column(Expression):
     """Descriptor representing a ClickHouse table column."""
+
+    # ... (Column implementation unchanged) ...
 
     def __init__(
         self,
@@ -150,6 +153,14 @@ class TableMeta(type):
         sample_by = mcls._normalize_clause(namespace.get("__sample_by__"))
         ttl_clause: str | None = namespace.get("__ttl__", None)
 
+        # Handle Metadata - check namespace or inherited
+        metadata = namespace.get("metadata")
+        if metadata is None:
+            for base in bases:
+                if hasattr(base, "metadata"):
+                    metadata = base.metadata
+                    break
+
         for attr_name, attr_value in namespace.items():
             if isinstance(attr_value, Column):
                 columns[attr_name] = attr_value
@@ -166,23 +177,27 @@ class TableMeta(type):
         )
         inherited_columns: Dict[str, Column] = {}
         inherited_engine: TableEngine | None = None
+        
+        # Also ensure metadata is set on class if resolved from base
+        if metadata is not None and not "metadata" in namespace:
+            cls.metadata = metadata
 
-        for metadata in base_metadata:
-            if metadata is None:
+        for metadata_obj in base_metadata:
+            if metadata_obj is None:
                 continue
-            for column_info in metadata.columns:
+            for column_info in metadata_obj.columns:
                 if column_info.name not in columns and column_info.name not in inherited_columns:
                     inherited_columns[column_info.name] = column_info.column
-            if inherited_engine is None and metadata.engine is not None:
-                inherited_engine = metadata.engine
+            if inherited_engine is None and metadata_obj.engine is not None:
+                inherited_engine = metadata_obj.engine
             if not order_by:
-                order_by = metadata.order_by
+                order_by = metadata_obj.order_by
             if not partition_by:
-                partition_by = metadata.partition_by
+                partition_by = metadata_obj.partition_by
             if not sample_by:
-                sample_by = metadata.sample_by
+                sample_by = metadata_obj.sample_by
             if ttl_clause is None:
-                ttl_clause = metadata.ttl
+                ttl_clause = metadata_obj.ttl
 
         all_columns = {**inherited_columns, **columns}
 
@@ -202,6 +217,11 @@ class TableMeta(type):
         )
 
         cls.__abstract__ = namespace.get("__abstract__", False)
+        
+        # Register in metadata
+        if not cls.__abstract__ and metadata is not None:
+            metadata.tables[tablename] = cls.__table__
+
         cls._decl_class_registry: Dict[str, Type["Table"]] = {}
         owner = mcls._find_registry_owner(bases)
         if owner is not None:
@@ -216,7 +236,7 @@ class TableMeta(type):
         if isinstance(value, str):
             return (value,)
         return tuple(value)
-
+    
     @staticmethod
     def _find_registry_owner(bases: Tuple[type, ...]) -> Type["Table"] | None:
         for base in bases:
@@ -232,6 +252,7 @@ class Table(metaclass=TableMeta):
     __table__: TableMetadata
     __abstract__ = True
     _decl_class_registry: Dict[str, Type["Table"]] = {}
+    metadata: MetaData = MetaData()
 
     def __init__(self, **values: Any) -> None:
         column_map = self.__table__.column_map

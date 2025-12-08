@@ -1,11 +1,15 @@
 """Demonstration of Quick Wins features in CHORM."""
 
-from chorm import Table, Column, MergeTree, select
+from chorm import Table, Column, MergeTree, select, MetaData
 from chorm.types import UInt64, String, DateTime
+
+
+metadata = MetaData()
 
 
 # Define tables
 class User(Table):
+    metadata = metadata
     __tablename__ = "users"
     id = Column(UInt64(), primary_key=True)
     name = Column(String())

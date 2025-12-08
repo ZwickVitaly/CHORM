@@ -1,12 +1,16 @@
 """Example of using AsyncSession with CHORM."""
 
 import asyncio
-from chorm import Table, Column, AsyncSession, create_async_engine, select
+from chorm import Table, Column, AsyncSession, create_async_engine, select, MetaData
 from chorm.types import UInt64, String
 from chorm.table_engines import MergeTree
 
 
+metadata = MetaData()
+
+
 class User(Table):
+    metadata = metadata
     __tablename__ = "users"
     id = Column(UInt64(), primary_key=True)
     name = Column(String())

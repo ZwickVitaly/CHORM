@@ -5,21 +5,27 @@ All notable changes to CHORM will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.1.4] - 2025-12-08
+## [0.1.4] - 2025-12-09
 
 ### Added
-- **Codec Support**: Added support for ClickHouse column compression codecs (`CODEC(...)`) via `Column(..., codec=ZSTD(1))`.
+- **ClickHouse Codec Support**: Added `codec` parameter to `Column` (e.g., `Column(..., codec=ZSTD(1))`).
+- **SQLAlchemy-style Metadata**: Added `MetaData` registry for schema management (`metadata.create_all()`, `metadata.drop_all()`).
+- **Alembic-style CLI**: 
+    - Redesigned project structure: `migrations/versions/` and `migrations/env.py`.
+    - `env.py` for configuring auto-migration metadata.
+    - Multiple migration naming modes: `uuid` (default), `int`, `django`.
+    - Configuration via `chorm.toml`.
 - **Batch Optimization**: Promoted native batch insert implementation (`chorm.batch.bulk_insert`, `ClickHouseBatchInsert`) for high performance.
-- **Connection Pool Liveness**: Added active connection validation and pre-pings to `ConnectionPool` and `AsyncConnectionPool`.
-- **CI/CD**: Added `tests.yml` workflow for PR validation.
+- **Connection Pool Liveness**: Added active connection validation and pre-pings.
 
 ### Changed
+- **Auto-Migration**: Refactored `auto-migrate` to use `MetaData` registry for reliable model discovery instead of file scanning magic.
 - **Performance**: Making Pandas an optional dependency (`pip install "clickhouse-chorm[pandas]"`).
-- **Optimization**: Deprecated legacy SQL-based batch classes (`BatchInsert`, `BatchUpdate`, `BatchDelete`) in favor of native implementations.
-- **Testing**: Refactored Distributed table tests to use single-instance loopback, removing need for second ClickHouse service in CI.
+- **Optimization**: Deprecated legacy SQL-based batch classes.
+- **Testing**: Refactored Distributed table tests.
 
 ### Fixed
-- **Testing**: Fixed CI workflows to properly wait for ClickHouse and removed deprecated dual-instance configuration.
+- **Testing**: Fixed CI workflows to properly wait for ClickHouse.
 
 ## [0.1.3] - 2025-12-06
 

@@ -23,6 +23,7 @@ from chorm.batch_optimized import (
 from chorm.declarative import Column, DeclarativeError, Table
 from chorm.ddl import format_ddl
 from chorm.engine import Connection, Engine, EngineConfig, create_engine
+from chorm.metadata import MetaData
 from chorm.health import AsyncHealthCheck, HealthCheck
 from chorm.profiler import QueryAnalyzer, QueryComplexity
 from chorm.metrics import (
@@ -172,6 +173,7 @@ __all__ = [
     "Engine",
     "EngineConfig",
     "create_engine",
+    "MetaData",
     "HealthCheck",
     "MetricsCollector",
     "QueryAnalyzer",

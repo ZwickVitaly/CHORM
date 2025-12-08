@@ -73,6 +73,21 @@ class {class_name}(Migration):
         pass
 """
 
+ENV_TEMPLATE = """
+from chorm import MetaData
+from chorm.engine import create_engine
+
+# target_metadata is the MetaData object your migrations should use.
+# It can be imported from your application code.
+# target_metadata = myapp.models.metadata
+
+# For auto-generation to work, you must assign this variable!
+target_metadata = MetaData()
+
+def get_engine_url():
+    # Return connection URL string for CHORM
+    return "clickhouse://default:@localhost:8123/default"
+"""
 
 def init_project(args):
     """Initialize a new CHORM project."""
@@ -80,12 +95,35 @@ def init_project(args):
 
     # Create migrations directory
     migrations_dir = cwd / "migrations"
+    versions_dir = migrations_dir / "versions"
+    
     if not migrations_dir.exists():
         migrations_dir.mkdir()
-        # Create __init__.py to make it a package
+        # Create versions directory
+        versions_dir.mkdir()
+        
+        # Create __init__.py files
         (migrations_dir / "__init__.py").touch()
+        (versions_dir / "__init__.py").touch()
+        
+        # Create env.py
+        env_file = migrations_dir / "env.py"
+        env_file.write_text(ENV_TEMPLATE.strip())
+        
         print(f"Created migrations directory: {migrations_dir}")
+        print(f"Created versions directory: {versions_dir}")
+        print(f"Created env.py: {env_file}")
     else:
+        if not versions_dir.exists():
+             versions_dir.mkdir()
+             (versions_dir / "__init__.py").touch()
+             print(f"Created versions directory: {versions_dir}")
+             
+        env_file = migrations_dir / "env.py"
+        if not env_file.exists():
+             env_file.write_text(ENV_TEMPLATE.strip())
+             print(f"Created env.py: {env_file}")
+             
         print(f"Migrations directory already exists: {migrations_dir}")
 
     # Create chorm.toml config template
@@ -103,39 +141,103 @@ secure = false
 [migrations]
 directory = "migrations"
 table_name = "chorm_migrations"
+version_style = "uuid" # Options: uuid, int, django
 """
         config_file.write_text(config_content)
         print(f"Created configuration file: {config_file}")
+    else:
         print(f"Configuration file already exists: {config_file}")
 
 
 def make_migration(args):
     """Create a new migration file."""
     cwd = Path.cwd()
-    migrations_dir = cwd / "migrations"
+    config = load_config(cwd)
+    migrations_config = config.get("migrations", {})
+    
+    # Support old structure for backward compatibility, but prefer new
+    migrations_dir = cwd / migrations_config.get("directory", "migrations")
+    versions_dir = migrations_dir / "versions"
+    
+    target_dir = versions_dir if versions_dir.exists() else migrations_dir
 
     if not migrations_dir.exists():
         print("Error: migrations directory not found. Run 'chorm init' first.")
         sys.exit(1)
+        
+    version_style = migrations_config.get("version_style", "uuid").lower()
 
-    # Generate timestamp ID
+    # Generate filename based on style
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    name = args.message.replace(" ", "_").lower() if args.message else "migration"
-    filename = f"{timestamp}_{name}.py"
-    filepath = migrations_dir / filename
+    slug = args.message.replace(" ", "_").lower() if args.message else "migration"
+    
+    # Get existing files for sequential numbering
+    existing_files = sorted([f for f in target_dir.glob("*.py") if f.name != "__init__.py"])
+    
+    filename = ""
+    migration_id = timestamp # Default ID is timestamp unless UUID used
+    
+    if version_style == "uuid":
+        import uuid
+        migration_id = str(uuid.uuid4()).replace("-", "")
+        filename = f"{migration_id}_{slug}.py"
+        
+    elif version_style == "int":
+        # pattern: 1_slug.py
+        next_rev = 1
+        if existing_files:
+            try:
+                # Try to parse leading number
+                last_name = existing_files[-1].name
+                last_rev = int(last_name.split("_")[0])
+                next_rev = last_rev + 1
+            except ValueError:
+                pass
+        filename = f"{next_rev}_{slug}.py"
+        migration_id = str(next_rev)
+        
+    elif version_style == "django":
+        # pattern: 0001_slug.py
+        next_rev = 1
+        if existing_files:
+            try:
+                last_name = existing_files[-1].name
+                last_rev = int(last_name.split("_")[0])
+                next_rev = last_rev + 1
+            except ValueError:
+                pass
+        filename = f"{next_rev:04d}_{slug}.py"
+        migration_id = f"{next_rev:04d}"
+        
+    else:
+        # Fallback to timestamp
+        filename = f"{timestamp}_{slug}.py"
+        migration_id = timestamp
 
-    # Determine down_revision (simplistic: just look at latest file)
-    # In a real system, we'd parse the files or check the DB.
-    # For now, let's just use "None" or find the latest file by name.
-    existing_files = sorted([f for f in migrations_dir.glob("*.py") if f.name != "__init__.py"])
+    filepath = target_dir / filename
+
+    # Determine down_revision
     down_revision = "None"
     if existing_files:
-        # Assuming filename starts with timestamp
         last_file = existing_files[-1]
-        down_revision = last_file.name.split("_")[0]
+        # Extract ID from last file
+        down_revision_id = last_file.name.split("_")[0]
+        # Quote it if it's a string (UUID or Timestamp), strict int/django can use int but let's treat all as strings for safety in generated code
+        down_revision = f'"{down_revision_id}"'
+
+    # Calculate class name
+    class_name = args.message.replace(" ", "").title().replace("_", "") if args.message else "NewMigration"
+    if not class_name: # Handle empty message case more gracefully
+         class_name = "NewMigration"
+    # Ensure it starts with a letter
+    if class_name[0].isdigit():
+        class_name = "Migration" + class_name
 
     content = MIGRATION_TEMPLATE.format(
-        name=args.message or "New Migration", timestamp=timestamp, down_revision=down_revision
+        name=args.message or "New Migration", 
+        timestamp=migration_id, 
+        down_revision=down_revision,
+        class_name=class_name
     )
 
     filepath.write_text(content)
@@ -170,8 +272,17 @@ def get_session(config: Dict[str, Any]) -> Session:
 def load_migrations(migrations_dir: Path) -> List[Any]:
     """Load migration classes from files."""
     migrations = []
-    for filepath in sorted(migrations_dir.glob("*.py")):
-        if filepath.name == "__init__.py":
+    
+    # Check for versions subdirectory
+    versions_dir = migrations_dir / "versions"
+    search_dirs = [versions_dir, migrations_dir] if versions_dir.exists() else [migrations_dir]
+    
+    files_to_load = []
+    for d in search_dirs:
+         files_to_load.extend(sorted(d.glob("*.py")))
+         
+    for filepath in files_to_load:
+        if filepath.name == "__init__.py" or filepath.name == "env.py":
             continue
 
         spec = importlib.util.spec_from_file_location(filepath.stem, filepath)
@@ -183,6 +294,7 @@ def load_migrations(migrations_dir: Path) -> List[Any]:
             for attr_name in dir(module):
                 attr = getattr(module, attr_name)
                 if isinstance(attr, type) and issubclass(attr, Migration) and attr is not Migration:
+                    # Store filename or relative path helps with debugging but id is key
                     migrations.append(attr())
                     break
     return migrations
@@ -338,17 +450,58 @@ def auto_migrate(args):
 
     cwd = Path.cwd()
     config = load_config(cwd)
-    migrations_dir = cwd / config.get("migrations", {}).get("directory", "migrations")
+    migrations_config = config.get("migrations", {})
+    migrations_dir = cwd / migrations_config.get("directory", "migrations")
+    versions_dir = migrations_dir / "versions"
+    target_dir = versions_dir if versions_dir.exists() else migrations_dir
 
     if not migrations_dir.exists():
         print("Error: migrations directory not found. Run 'chorm init' first.")
         sys.exit(1)
 
-    # Get models path
-    models_path = Path(args.models) if args.models else cwd
-    if not models_path.exists():
-        print(f"Error: models path '{models_path}' not found.")
-        sys.exit(1)
+    # 1. Load Metadata
+    model_tables = {}
+    
+    # Check for env.py first
+    env_file = migrations_dir / "env.py"
+    if env_file.exists():
+        print(f"Loading metadata from {env_file}...")
+        spec = importlib.util.spec_from_file_location("env", env_file)
+        if spec and spec.loader:
+            env_module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(env_module)
+            if hasattr(env_module, "target_metadata") and env_module.target_metadata:
+                 print(f"Found target_metadata in env.py")
+                 model_tables = env_module.target_metadata.tables
+            else:
+                 print("Warning: target_metadata not found or empty in env.py")
+    
+    # If no metadata found in env.py, fall back to scanning models path (CLI arg)
+    if not model_tables:
+        models_path = Path(args.models) if args.models else cwd
+        if not models_path.exists():
+             print(f"Error: models path '{models_path}' not found.")
+             sys.exit(1)
+        
+        print(f"Scanning for models in: {models_path}")
+        loader = ModelLoader()
+        loaded_classes = loader.find_all_models(models_path)
+         
+        if not loaded_classes:
+            print(f"No Table classes found in {models_path}")
+            sys.exit(1)
+
+        for cls in loaded_classes.values():
+            if hasattr(cls, "metadata") and cls.metadata:
+                model_tables[cls.__tablename__] = cls.__table__
+            elif hasattr(cls, "__table__"):
+                 model_tables[cls.__tablename__] = cls.__table__
+
+    if not model_tables:
+         print("Error: Could not find any table metadata.")
+         sys.exit(1)
+
+    print(f"Found {len(model_tables)} table model(s): {', '.join(sorted(model_tables.keys()))}")
 
     # Get database connection info
     db_config = config.get("chorm", {})
@@ -358,20 +511,9 @@ def auto_migrate(args):
     user = args.user or db_config.get("user", "default")
     password = args.password or db_config.get("password", "")
 
-    print(f"Scanning for models in: {models_path}")
     print(f"Connecting to ClickHouse at {host}:{port}...")
 
     try:
-        # Load models
-        loader = ModelLoader()
-        model_tables = loader.find_all_models(models_path)
-        
-        if not model_tables:
-            print(f"No Table classes found in {models_path}")
-            sys.exit(1)
-
-        print(f"Found {len(model_tables)} table model(s): {', '.join(sorted(model_tables.keys()))}")
-
         # Connect to database
         client = clickhouse_connect.get_client(
             host=host, port=port, username=user, password=password, database=database
@@ -401,24 +543,52 @@ def auto_migrate(args):
                 print(f"  - Drop table: {diff.table_name}")
 
         # Generate migration
-        migration_name = args.message or "auto_migration"
+        version_style = migrations_config.get("version_style", "uuid").lower()
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        slug = args.message.replace(" ", "_").lower() if args.message else "auto_migration"
 
-        # Find latest migration for down_revision
-        existing_files = sorted([f for f in migrations_dir.glob("*.py") if f.name != "__init__.py"])
+        # Determine down_revision and filename
+        existing_files = sorted([f for f in target_dir.glob("*.py") if f.name != "__init__.py"])
+        
+        filename = ""
+        migration_id = timestamp 
         down_revision = "None"
+        
         if existing_files:
             last_file = existing_files[-1]
-            # Try to extract timestamp from filename (first part before _)
-            parts = last_file.stem.split("_")
-            if parts:
-                down_revision = f'"{parts[0]}"'
+            down_revision_id = last_file.name.split("_")[0]
+            down_revision = f'"{down_revision_id}"'
 
-        migration_code = generator.generate_migration_code(diffs, migration_name, timestamp, down_revision)
+        if version_style == "uuid":
+            import uuid
+            migration_id = str(uuid.uuid4()).replace("-", "")
+            filename = f"{migration_id}_{slug}.py"
+        elif version_style == "int":
+            next_rev = 1
+            if existing_files:
+                try:
+                    last_rev = int(existing_files[-1].name.split("_")[0])
+                    next_rev = last_rev + 1
+                except ValueError: pass
+            filename = f"{next_rev}_{slug}.py"
+            migration_id = str(next_rev)
+        elif version_style == "django":
+            next_rev = 1
+            if existing_files:
+                try:
+                    last_rev = int(existing_files[-1].name.split("_")[0])
+                    next_rev = last_rev + 1
+                except ValueError: pass
+            filename = f"{next_rev:04d}_{slug}.py"
+            migration_id = f"{next_rev:04d}"
+        else:
+             filename = f"{timestamp}_{slug}.py"
+             migration_id = timestamp
+
+        migration_code = generator.generate_migration_code(diffs, args.message or "Auto Migration", migration_id, down_revision)
 
         # Write migration file
-        filename = f"{timestamp}_{migration_name.replace(' ', '_').lower()}.py"
-        filepath = migrations_dir / filename
+        filepath = target_dir / filename
         filepath.write_text(migration_code)
 
         print(f"\n✓ Created migration file: {filepath}")

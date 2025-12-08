@@ -103,7 +103,131 @@ async with AsyncSession(engine) as session:
     users = result.all()
 ```
 
-## Production Features
+### Schema Management with Metadata
+
+CHORM provides SQLAlchemy-like metadata for schema management:
+
+```python
+from chorm import Table, Column, MetaData
+from chorm.types import UInt64, String
+from chorm.table_engines import Memory
+
+# Create metadata object
+metadata = MetaData()
+
+# Define tables using metadata
+class User(Table):
+    metadata = metadata
+    __tablename__ = "users"
+    id = Column(UInt64(), primary_key=True)
+    name = Column(String())
+    engine = Memory()
+
+# Create all tables associated with this metadata
+metadata.create_all(engine)
+
+# Drop all tables
+metadata.drop_all(engine)
+```
+
+
+## CLI & Migrations
+
+CHORM includes a powerful CLI (similar to Alembic) for managing database migrations.
+
+### Initialization
+
+Initialize a new project with the required directory structure:
+
+```bash
+chorm init
+```
+
+This creates:
+- `migrations/versions/` - Directory for migration scripts
+- `migrations/env.py` - Configuration script for auto-migrations
+- `chorm.toml` - Configuration file
+
+### Configuration (`chorm.toml`)
+
+Configure your database connection and migration settings:
+
+```toml
+[chorm]
+host = "localhost"
+port = 8123
+database = "default"
+user = "default"
+password = ""
+secure = false
+
+[migrations]
+directory = "migrations"
+table_name = "chorm_migrations"
+version_style = "uuid" # Options: uuid, int, django
+```
+
+**Migration Naming Styles:**
+- `uuid` (default): `e4d90..._message.py`
+- `int`: `1_message.py`, `2_message.py` (sequential)
+- `django`: `0001_message.py`, `0002_message.py` (padded sequential)
+
+### Creating Migrations
+
+Create a new empty migration file:
+
+```bash
+chorm make-migration -m "create users table"
+```
+
+### Auto-Migrations
+
+Automatically generate migrations by comparing your models with the database.
+
+1.  **Configure `migrations/env.py`**:
+    To enable auto-discovery, import your `MetaData` object in `env.py`:
+
+    ```python
+    from chorm import MetaData
+    # Import your application's metadata
+    from myapp.models import metadata as target_metadata
+    ```
+
+2.  **Run Auto-Migrate**:
+
+    ```bash
+    chorm auto-migrate -m "initial schema"
+    ```
+
+    You can also point to a directory of models if not using `env.py`:
+    ```bash
+    chorm auto-migrate --models ./myapp/models -m "update schema"
+    ```
+
+### Applying Migrations
+
+Apply pending migrations:
+
+```bash
+chorm migrate
+```
+
+### Managing Migrations
+
+Show migration status:
+```bash
+chorm show-migrations
+```
+
+Rollback the last migration:
+```bash
+chorm downgrade
+```
+
+Rollback multiple steps:
+```bash
+chorm downgrade --steps 3
+```
 
 ### Connection Pooling
 
