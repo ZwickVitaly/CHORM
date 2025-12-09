@@ -33,7 +33,7 @@ class DistributedUsers(Table):
     name = Column(String())
     created_at = Column(Date())
     __engine__ = Distributed(
-        cluster="test_cluster",
+        cluster="default",  # Use built-in single-node 'default' cluster
         database="default",
         table="test_local_users",
         sharding_key="rand()"  # Required for INSERT with multiple shards
@@ -42,7 +42,7 @@ class DistributedUsers(Table):
 
 @pytest.fixture(scope="module")
 def engine():
-    """Create engine for tests (first ClickHouse instance)."""
+    """Create engine for tests (single ClickHouse instance)."""
     host = os.getenv("CLICKHOUSE_HOST", "localhost")
     port = int(os.getenv("CLICKHOUSE_PORT", "8123"))
     database = os.getenv("CLICKHOUSE_DB", "default")
@@ -59,78 +59,37 @@ def engine():
 
 
 @pytest.fixture(scope="module")
-def engine_distributed():
-    """Create engine for second ClickHouse instance."""
-    host = os.getenv("CLICKHOUSE_HOST", "localhost")
-    port = int(os.getenv("CLICKHOUSE_DISTRIBUTED_PORT", "8125"))
-    database = os.getenv("CLICKHOUSE_DB", "default")
-    password = os.getenv("CLICKHOUSE_PASSWORD", "123")
-
-    engine = create_engine(
-        host=host,
-        port=port,
-        username="default",
-        password=password,
-        database=database,
-    )
-    return engine
-
-
-@pytest.fixture(scope="module")
-def setup_cluster_and_tables(engine, engine_distributed):
-    """Set up cluster configuration and create tables on both instances."""
-    # Check if second ClickHouse instance is available first - before creating sessions
-    # Use socket check first to avoid connection errors during client creation
-    import socket
-    try:
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.settimeout(1)
-        result = sock.connect_ex((engine_distributed.config.host, engine_distributed.config.port))
-        sock.close()
-        if result != 0:
-            pytest.skip(f"Second ClickHouse instance is not available (port {engine_distributed.config.port}): connection refused. Skipping Distributed table tests.")
-    except Exception:
-        pytest.skip(f"Second ClickHouse instance is not available (port {engine_distributed.config.port}). Skipping Distributed table tests.")
-    
-    session1 = Session(engine)
-    session2 = Session(engine_distributed)
+def setup_cluster_and_tables(engine):
+    """Set up cluster configuration and create tables on single instance (loopback)."""
+    session = Session(engine)
 
     try:
-        # Check if cluster is configured
+        # Check if 'default' cluster is available (it usually is)
         try:
-            cluster_check = session1.execute(
-                "SELECT count() FROM system.clusters WHERE cluster = 'test_cluster'"
+            cluster_check = session.execute(
+                "SELECT count() FROM system.clusters WHERE cluster = 'default'"
             ).scalar()
             if cluster_check == 0:
-                pytest.skip("Cluster 'test_cluster' is not configured. Skipping Distributed table tests.")
+                pytest.skip("Cluster 'default' is not configured. Skipping Distributed table tests.")
         except Exception as e:
             pytest.skip(f"Failed to check cluster configuration: {e}. Skipping Distributed table tests.")
 
         # Drop tables if they exist
-        session1.execute(f"DROP TABLE IF EXISTS {DistributedUsers.__tablename__}")
-        session1.execute(f"DROP TABLE IF EXISTS {LocalUsers.__tablename__}")
-        session2.execute(f"DROP TABLE IF EXISTS {LocalUsers.__tablename__}")
+        session.execute(f"DROP TABLE IF EXISTS {DistributedUsers.__tablename__}")
+        session.execute(f"DROP TABLE IF EXISTS {LocalUsers.__tablename__}")
 
-        # Configure cluster if not exists (using SQL)
-        # Note: Cluster configuration should be done via config.xml or SQL
-        # For simplicity, we'll assume cluster is configured via docker-compose config
-        
-        # Create local table on first instance
-        session1.execute(LocalUsers.create_table(exists_ok=True))
-        session1.commit()
+        # Create local table 
+        session.execute(LocalUsers.create_table(exists_ok=True))
+        session.commit()
 
-        # Create local table on second instance
-        session2.execute(LocalUsers.create_table(exists_ok=True))
-        session2.commit()
-
-        # Create Distributed table on first instance
+        # Create Distributed table pointing to local table via 'default' cluster
         try:
-            session1.execute(DistributedUsers.create_table(exists_ok=True))
-            session1.commit()
+            session.execute(DistributedUsers.create_table(exists_ok=True))
+            session.commit()
         except Exception as e:
             error_msg = str(e)
             if "CLUSTER_DOESNT_EXIST" in error_msg or "cluster" in error_msg.lower():
-                pytest.skip(f"Cluster 'test_cluster' is not configured: {e}. Skipping Distributed table tests.")
+                pytest.skip(f"Cluster 'default' is not configured: {e}. Skipping Distributed table tests.")
             raise
 
         yield
@@ -138,11 +97,9 @@ def setup_cluster_and_tables(engine, engine_distributed):
     finally:
         # Cleanup
         try:
-            session1.execute(f"DROP TABLE IF EXISTS {DistributedUsers.__tablename__}")
-            session1.execute(f"DROP TABLE IF EXISTS {LocalUsers.__tablename__}")
-            session2.execute(f"DROP TABLE IF EXISTS {LocalUsers.__tablename__}")
-            session1.commit()
-            session2.commit()
+            session.execute(f"DROP TABLE IF EXISTS {DistributedUsers.__tablename__}")
+            session.execute(f"DROP TABLE IF EXISTS {LocalUsers.__tablename__}")
+            session.commit()
         except Exception:
             pass
 
@@ -182,8 +139,9 @@ def test_insert_into_distributed_table(engine, setup_cluster_and_tables):
 
     # Clear existing data
     session.execute(f"TRUNCATE TABLE IF EXISTS {DistributedUsers.__tablename__}")
+    session.execute(f"TRUNCATE TABLE IF EXISTS {LocalUsers.__tablename__}")
 
-    # Insert data
+    # Insert data via Dist table (should route to Local table)
     data = [
         LocalUsers(id=1, name="Alice", created_at=date(2024, 1, 1)),
         LocalUsers(id=2, name="Bob", created_at=date(2024, 1, 2)),
@@ -195,9 +153,15 @@ def test_insert_into_distributed_table(engine, setup_cluster_and_tables):
     
     session.commit()
 
-    # Verify data was inserted (may be on either shard)
-    result = session.execute(select(func.count()).select_from(DistributedUsers)).first()
-    assert result[0] >= 0  # At least some data should be inserted
+    # Verify data was inserted
+    # Note: Reads from Distributed might have slight replication delay if async, but loopback is usually immediate
+    # We check the local table to be sure data arrived
+    result_local = session.execute(select(func.count()).select_from(LocalUsers)).first()
+    assert result_local[0] == 3
+
+    # Check via Distributed table too
+    result_dist = session.execute(select(func.count()).select_from(DistributedUsers)).first()
+    assert result_dist[0] == 3
 
 
 def test_select_from_distributed_table(engine, setup_cluster_and_tables):
@@ -205,8 +169,9 @@ def test_select_from_distributed_table(engine, setup_cluster_and_tables):
     session = Session(engine)
     from datetime import date
 
-    # Insert test data first
+    # Insert test data into Local table directly
     session.execute(f"TRUNCATE TABLE IF EXISTS {DistributedUsers.__tablename__}")
+    session.execute(f"TRUNCATE TABLE IF EXISTS {LocalUsers.__tablename__}")
 
     data = [
         LocalUsers(id=1, name="Alice", created_at=date(2024, 1, 1)),
@@ -214,7 +179,7 @@ def test_select_from_distributed_table(engine, setup_cluster_and_tables):
     ]
 
     for user in data:
-        session.execute(insert(DistributedUsers).values(**user.to_dict()))
+        session.execute(insert(LocalUsers).values(**user.to_dict()))
     
     session.commit()
 
@@ -225,7 +190,9 @@ def test_select_from_distributed_table(engine, setup_cluster_and_tables):
         .order_by(DistributedUsers.id)
     ).all()
 
-    assert len(results) >= 0  # Data may be distributed across shards
+    assert len(results) == 2
+    assert results[0][1] == "Alice"
+    assert results[1][1] == "Bob"
 
 
 def test_distributed_table_with_sharding_key(engine, setup_cluster_and_tables):
@@ -238,7 +205,7 @@ def test_distributed_table_with_sharding_key(engine, setup_cluster_and_tables):
         id = Column(UInt64())
         name = Column(String())
         __engine__ = Distributed(
-            cluster="test_cluster",
+            cluster="default",
             database="default",
             table="test_local_users",
             sharding_key="id"
@@ -256,7 +223,7 @@ def test_distributed_table_with_sharding_key(engine, setup_cluster_and_tables):
 
         assert len(result) > 0
         engine_full = result[0][0]
-        assert "test_cluster" in engine_full
+        assert "default" in engine_full
         assert "id" in engine_full  # sharding key
 
     finally:
@@ -265,4 +232,3 @@ def test_distributed_table_with_sharding_key(engine, setup_cluster_and_tables):
             session.commit()
         except Exception:
             pass
-

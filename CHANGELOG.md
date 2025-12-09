@@ -5,6 +5,12 @@ All notable changes to CHORM will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.6] - 2025-12-09
+
+### Fixed
+- **CLI**: Fixed `chorm introspect` command failing with `TypeError` due to unescaped `%` characters in system table queries.
+- **Tests**: Refactored Distributed table integration tests to run on a single ClickHouse node (using local loopback), removing the requirement for a second instance on port 8125.
+
 ## [0.1.5] - 2025-12-09
 
 ### Fixed

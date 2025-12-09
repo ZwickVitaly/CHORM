@@ -19,7 +19,7 @@ class TableIntrospector:
             SELECT name 
             FROM system.tables 
             WHERE database = %(database)s 
-            AND engine NOT LIKE '%View%'
+            AND engine NOT LIKE '%%View%%'
             ORDER BY name
         """
         result = self.client.query(query, parameters={"database": database})
