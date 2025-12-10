@@ -16,21 +16,23 @@ from chorm.sql.expression import func
 # Define tables
 class User(Table):
     __tablename__ = "users"
+    __engine__ = MergeTree()
+    
     id = Column(UInt64(), primary_key=True)
     name = Column(String())
     city = Column(String())
     age = Column(UInt64())
-    engine = MergeTree()
 
 
 class Order(Table):
     __tablename__ = "orders"
+    __engine__ = MergeTree()
+    
     id = Column(UInt64(), primary_key=True)
     user_id = Column(UInt64())
     amount = Column(UInt64())
     status = Column(String())
     date = Column(Date())
-    engine = MergeTree()
 
 
 def main():

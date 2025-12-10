@@ -16,11 +16,12 @@ from chorm.sql.expression import Identifier, func
 # Define our model
 class Product(Table):
     __tablename__ = "products_demo"
+    __engine__ = MergeTree()
+    
     id = Column(UInt64(), primary_key=True)
     name = Column(String())
     tags = Column(Array(String()))
     prices = Column(Array(UInt64()))  # Price history
-    engine = MergeTree()
 
 
 def main():

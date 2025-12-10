@@ -13,9 +13,8 @@ Key Concepts:
 Run: python examples/metadata_demo.py
 """
 
-from chorm import Table, Column, MetaData, create_engine, Session
+from chorm import Table, Column, MetaData, create_engine, Session, MergeTree
 from chorm.types import UInt64, String, DateTime
-from chorm.table_engines import MergeTree
 
 # 1. Create a MetaData registry
 metadata = MetaData()
@@ -25,24 +24,22 @@ metadata = MetaData()
 class User(Table):
     metadata = metadata
     __tablename__ = "demo_users"
+    __engine__ = MergeTree()
     
     id = Column(UInt64(), primary_key=True)
     name = Column(String())
     email = Column(String())
     created_at = Column(DateTime(), default="now()")
-    
-    engine = MergeTree()
 
 
 class AccessLog(Table):
     metadata = metadata
     __tablename__ = "demo_access_logs"
+    __engine__ = MergeTree()
     
     id = Column(UInt64(), primary_key=True)
     user_id = Column(UInt64())
     path = Column(String())
-    
-    engine = MergeTree()
 
 
 def main():

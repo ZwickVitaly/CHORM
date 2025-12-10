@@ -179,13 +179,17 @@ class MigrationManager:
         rows = result.all()
         return [row[0] for row in rows]
 
+    @staticmethod
+    def _escape_string(value: str) -> str:
+        return value.replace("\\", "\\\\").replace("'", "''")
+
     def apply_migration(self, migration: Migration) -> None:
         """Record a migration as applied."""
         self.ensure_migration_table()
 
         # Use string formatting since Session.execute doesn't support params
         # Escape single quotes in name to prevent SQL injection
-        safe_name = migration.name.replace("'", "''")
+        safe_name = self._escape_string(migration.name)
         self.session.execute(f"INSERT INTO {self.table_name} (id, name) VALUES ('{migration.id}', '{safe_name}')")
 
     def unapply_migration(self, migration_id: str) -> None:

@@ -15,7 +15,7 @@ class User(Table):
     name = Column(String())
     city = Column(String())
     created_at = Column(DateTime())
-    engine = MergeTree()
+    __engine__ = MergeTree()
 
 
 def main():

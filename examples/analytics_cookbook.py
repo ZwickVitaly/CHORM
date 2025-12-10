@@ -26,12 +26,13 @@ metadata = MetaData()
 class UserEvent(Table):
     metadata = metadata
     __tablename__ = "events_cookbook"
+    __engine__ = MergeTree()
+    __order_by__ = ("event_type", "timestamp")
+    
     user_id = Column(UInt64())
     event_type = Column(String())  # 'signup', 'view_item', 'add_to_cart', 'purchase'
     timestamp = Column(DateTime())
     amount = Column(Float64())  # For purchases
-    engine = MergeTree()
-    __order_by__ = ("event_type", "timestamp")
 
 
 # --- Setup ---

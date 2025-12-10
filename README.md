@@ -41,18 +41,16 @@ pip install clickhouse-chorm
 ### Define Models
 
 ```python
-from chorm import Table, Column
+from chorm import Table, Column, MergeTree
 from chorm.types import UInt64, String
-from chorm.table_engines import MergeTree
 
 class User(Table):
     __tablename__ = "users"
+    __engine__ = MergeTree()
     
     id = Column(UInt64(), primary_key=True)
     name = Column(String())
     email = Column(String())
-    
-    engine = MergeTree()
 ```
 
 ### Synchronous Usage
@@ -108,9 +106,8 @@ async with AsyncSession(engine) as session:
 CHORM provides SQLAlchemy-like metadata for schema management:
 
 ```python
-from chorm import Table, Column, MetaData
+from chorm import Table, Column, MetaData, Memory
 from chorm.types import UInt64, String
-from chorm.table_engines import Memory
 
 # Create metadata object
 metadata = MetaData()
@@ -119,9 +116,10 @@ metadata = MetaData()
 class User(Table):
     metadata = metadata
     __tablename__ = "users"
+    __engine__ = Memory()
+    
     id = Column(UInt64(), primary_key=True)
     name = Column(String())
-    engine = Memory()
 
 # Create all tables associated with this metadata
 metadata.create_all(engine)
@@ -921,7 +919,7 @@ stmt = select(User).settings(max_threads=4, max_memory_usage=10000000000)
 ### Window Functions
 
 ```python
-from chorm.sql.expression import window, func
+from chorm import window, func
 
 # Ranking products by sales within each category
 w = window(
@@ -1003,7 +1001,7 @@ stmt = (
 ### Conditional Aggregations
 
 ```python
-from chorm.sql.expression import func
+from chorm import func
 
 # Multiple metrics in one query
 stmt = select(
@@ -1035,70 +1033,70 @@ CHORM supports all major ClickHouse table engines. Choose the right engine based
 
 **MergeTree** - Default engine for most use cases:
 ```python
-from chorm.table_engines import MergeTree
+from chorm import MergeTree
 
 class User(Table):
     __tablename__ = "users"
-    engine = MergeTree()
+    __engine__ = MergeTree()
     # ORDER BY is required for MergeTree
 ```
 
 **ReplacingMergeTree** - For data with updates (deduplication):
 ```python
-from chorm.table_engines import ReplacingMergeTree
+from chorm import ReplacingMergeTree
 
 class User(Table):
     __tablename__ = "users"
-    engine = ReplacingMergeTree(version_column="updated_at")
+    __engine__ = ReplacingMergeTree(version_column="updated_at")
     # Keeps only the latest version based on version_column
 ```
 
 **SummingMergeTree** - For pre-aggregated metrics:
 ```python
-from chorm.table_engines import SummingMergeTree
+from chorm import SummingMergeTree
 
 class Metrics(Table):
     __tablename__ = "metrics"
-    engine = SummingMergeTree(columns=["value", "count"])
+    __engine__ = SummingMergeTree(columns=["value", "count"])
     # Automatically sums numeric columns during merges
 ```
 
 **AggregatingMergeTree** - For pre-aggregated data with aggregate functions:
 ```python
-from chorm.table_engines import AggregatingMergeTree
+from chorm import AggregatingMergeTree
 
 class AggregatedStats(Table):
     __tablename__ = "aggregated_stats"
-    engine = AggregatingMergeTree()
+    __engine__ = AggregatingMergeTree()
     # Stores pre-computed aggregates
 ```
 
 **CollapsingMergeTree** - For data with sign-based updates:
 ```python
-from chorm.table_engines import CollapsingMergeTree
+from chorm import CollapsingMergeTree
 
 class Events(Table):
     __tablename__ = "events"
-    engine = CollapsingMergeTree(sign_column="sign")
+    __engine__ = CollapsingMergeTree(sign_column="sign")
     # sign=1 for insert, sign=-1 for delete
 ```
 
 **VersionedCollapsingMergeTree** - CollapsingMergeTree with versioning:
 ```python
-from chorm.table_engines import VersionedCollapsingMergeTree
+from chorm import VersionedCollapsingMergeTree
 
 class Events(Table):
     __tablename__ = "events"
-    engine = VersionedCollapsingMergeTree(sign_column="sign", version_column="version")
+    __engine__ = VersionedCollapsingMergeTree(sign_column="sign", version_column="version")
 ```
 
 **GraphiteMergeTree** - For Graphite metrics:
 ```python
-from chorm.table_engines import GraphiteMergeTree
+from chorm import GraphiteMergeTree
 
 class GraphiteData(Table):
     __tablename__ = "graphite"
-    engine = GraphiteMergeTree(config_element="graphite_rollup")
+    __engine__ = GraphiteMergeTree(config_element="graphite_rollup")
 ```
 
 ### Replicated Engines
@@ -1106,7 +1104,7 @@ class GraphiteData(Table):
 All MergeTree engines have replicated versions for high availability:
 
 ```python
-from chorm.table_engines import (
+from chorm import (
     ReplicatedMergeTree,
     ReplicatedReplacingMergeTree,
     ReplicatedSummingMergeTree,
@@ -1118,7 +1116,7 @@ from chorm.table_engines import (
 
 class ReplicatedUser(Table):
     __tablename__ = "users"
-    engine = ReplicatedMergeTree(
+    __engine__ = ReplicatedMergeTree(
         zookeeper_path="/clickhouse/tables/users",
         replica_name="replica1"
     )
@@ -1129,42 +1127,42 @@ class ReplicatedUser(Table):
 For small tables and temporary data:
 
 ```python
-from chorm.table_engines import Log, TinyLog, StripeLog
+from chorm import Log, TinyLog, StripeLog
 
 # Log - General purpose log engine
 class TempData(Table):
     __tablename__ = "temp"
-    engine = Log()
+    __engine__ = Log()
 
 # TinyLog - Minimal overhead
 class SmallTable(Table):
     __tablename__ = "small"
-    engine = TinyLog()
+    __engine__ = TinyLog()
 
 # StripeLog - Better for writes
 class WriteHeavy(Table):
     __tablename__ = "writes"
-    engine = StripeLog()
+    __engine__ = StripeLog()
 ```
 
 ### Special Engines
 
 **Memory** - In-memory storage:
 ```python
-from chorm.table_engines import Memory
+from chorm import Memory
 
 class Cache(Table):
     __tablename__ = "cache"
-    engine = Memory()
+    __engine__ = Memory()
 ```
 
 **Distributed** - Distributed tables across cluster:
 ```python
-from chorm.table_engines import Distributed
+from chorm import Distributed
 
 class DistributedUser(Table):
     __tablename__ = "users_distributed"
-    engine = Distributed(
+    __engine__ = Distributed(
         cluster="my_cluster",
         database="default",
         table="users"
@@ -1173,20 +1171,20 @@ class DistributedUser(Table):
 
 **Kafka** - Kafka integration:
 ```python
-from chorm.table_engines import Kafka
+from chorm import Kafka
 
 class KafkaEvents(Table):
     __tablename__ = "kafka_events"
-    engine = Kafka()
+    __engine__ = Kafka()
 ```
 
 **External Data Sources:**
 ```python
-from chorm.table_engines import MySQL, PostgreSQL, ODBC, JDBC
+from chorm import MySQL, PostgreSQL, ODBC, JDBC
 
 # MySQL
 class MySQLTable(Table):
-    engine = MySQL(
+    __engine__ = MySQL(
         host="mysql.example.com",
         database="db",
         table="table",
@@ -1196,7 +1194,7 @@ class MySQLTable(Table):
 
 # PostgreSQL
 class PostgresTable(Table):
-    engine = PostgreSQL(
+    __engine__ = PostgreSQL(
         host="postgres.example.com",
         database="db",
         table="table",
@@ -1244,13 +1242,12 @@ from chorm.types import (
 
 class Event(Table):
     __tablename__ = "events"
+    __engine__ = MergeTree()
     
     id = Column(UInt64(), primary_key=True)
     tags = Column(Array(String()))
     metadata = Column(Map(String(), String()))
     optional_field = Column(Nullable(String()))
-    
-    engine = MergeTree()
 ```
 
 ## Documentation

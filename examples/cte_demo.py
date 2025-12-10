@@ -18,20 +18,22 @@ from chorm.sql.expression import func, Identifier
 
 class User(Table):
     __tablename__ = "users"
+    __engine__ = MergeTree()
+    
     id = Column(UInt64(), primary_key=True)
     name = Column(String())
     city = Column(String())
     active = Column(UInt64())
-    engine = MergeTree()
 
 
 class Order(Table):
     __tablename__ = "orders"
+    __engine__ = MergeTree()
+    
     id = Column(UInt64(), primary_key=True)
     user_id = Column(UInt64())
     amount = Column(UInt64())
     date = Column(Date())
-    engine = MergeTree()
 
 
 def demo_simple_cte():

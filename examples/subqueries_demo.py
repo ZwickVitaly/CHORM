@@ -21,18 +21,20 @@ from chorm.sql.expression import func, exists, Identifier
 
 class User(Table):
     __tablename__ = "users"
+    __engine__ = MergeTree()
+    
     id = Column(UInt64(), primary_key=True)
     name = Column(String())
     city = Column(String())
-    engine = MergeTree()
 
 
 class Order(Table):
     __tablename__ = "orders"
+    __engine__ = MergeTree()
+    
     id = Column(UInt64(), primary_key=True)
     user_id = Column(UInt64())
     amount = Column(UInt64())
-    engine = MergeTree()
 
 
 def demo_subquery_in_where():

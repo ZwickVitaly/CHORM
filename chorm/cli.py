@@ -169,7 +169,14 @@ def make_migration(args):
 
     # Generate filename based on style
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    slug = args.message.replace(" ", "_").lower() if args.message else "migration"
+    
+    # Sanitize slug
+    raw_slug = args.message.replace(" ", "_").lower() if args.message else "migration"
+    # Remove any characters that aren't alphanumeric, underscore, or dash
+    import re
+    slug = re.sub(r'[^a-z0-9_-]', '', raw_slug)
+    if not slug:
+        slug = "migration"
     
     # Get existing files for sequential numbering
     existing_files = sorted([f for f in target_dir.glob("*.py") if f.name != "__init__.py"])
@@ -545,7 +552,12 @@ def auto_migrate(args):
         # Generate migration
         version_style = migrations_config.get("version_style", "uuid").lower()
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        slug = args.message.replace(" ", "_").lower() if args.message else "auto_migration"
+        
+        raw_slug = args.message.replace(" ", "_").lower() if args.message else "auto_migration"
+        import re
+        slug = re.sub(r'[^a-z0-9_-]', '', raw_slug)
+        if not slug:
+            slug = "auto_migration"
 
         # Determine down_revision and filename
         existing_files = sorted([f for f in target_dir.glob("*.py") if f.name != "__init__.py"])

@@ -9,9 +9,10 @@ from chorm.types import UInt64, String
 
 class User(Table):
     __tablename__ = "users"
+    __engine__ = MergeTree()
+    
     id = Column(UInt64(), primary_key=True)
     name = Column(String())
-    engine = MergeTree()
 
 print("--- SELECT ---")
 stmt = select(User.id, User.name).where(User.id > 10).order_by(User.name).limit(5)

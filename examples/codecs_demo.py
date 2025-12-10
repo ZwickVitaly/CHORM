@@ -13,9 +13,8 @@ Key Concepts:
 Run: python examples/codecs_demo.py
 """
 
-from chorm import Table, Column, MetaData, create_engine, Session
+from chorm import Table, Column, MetaData, create_engine, Session, MergeTree
 from chorm.types import UInt64, Float64, String, DateTime
-from chorm.table_engines import MergeTree
 from chorm.codecs import ZSTD, LZ4, Delta, DoubleDelta, Gorilla, T64
 
 metadata = MetaData()
@@ -23,6 +22,7 @@ metadata = MetaData()
 class SensorData(Table):
     metadata = metadata
     __tablename__ = "demo_sensor_data"
+    __engine__ = MergeTree()
     
     # Time series often benefit from DoubleDelta + ZSTD
     timestamp = Column(
@@ -48,8 +48,6 @@ class SensorData(Table):
         String(),
         codec=LZ4()
     )
-    
-    engine = MergeTree()
 
 
 def main():

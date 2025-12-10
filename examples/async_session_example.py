@@ -1,9 +1,8 @@
 """Example of using AsyncSession with CHORM."""
 
 import asyncio
-from chorm import Table, Column, AsyncSession, create_async_engine, select, MetaData
+from chorm import Table, Column, AsyncSession, create_async_engine, select, MetaData, MergeTree
 from chorm.types import UInt64, String
-from chorm.table_engines import MergeTree
 
 
 metadata = MetaData()
@@ -12,10 +11,11 @@ metadata = MetaData()
 class User(Table):
     metadata = metadata
     __tablename__ = "users"
+    __engine__ = MergeTree()
+    
     id = Column(UInt64(), primary_key=True)
     name = Column(String())
     email = Column(String())
-    engine = MergeTree()
 
 
 async def main():

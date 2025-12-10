@@ -8,28 +8,31 @@ from chorm.sql.expression import func
 # Define tables
 class User(Table):
     __tablename__ = "users"
+    __engine__ = MergeTree()
+    
     id = Column(UInt64(), primary_key=True)
     name = Column(String())
     city = Column(String())
-    engine = MergeTree()
 
 
 class Order(Table):
     __tablename__ = "orders"
+    __engine__ = MergeTree()
+    
     id = Column(UInt64(), primary_key=True)
     user_id = Column(UInt64())
     product_id = Column(UInt64())
     amount = Column(UInt64())
     status = Column(String())
-    engine = MergeTree()
 
 
 class Product(Table):
     __tablename__ = "products"
+    __engine__ = MergeTree()
+    
     id = Column(UInt64(), primary_key=True)
     name = Column(String())
     price = Column(UInt64())
-    engine = MergeTree()
 
 
 def main():
