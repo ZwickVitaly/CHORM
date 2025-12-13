@@ -296,6 +296,59 @@ class View(TableEngine):
     engine_name = "View"
 
 
+class MaterializedView(TableEngine):
+    """Materialized View engine (marker).
+    
+    This is a special engine marker for defining Materialized Views.
+    It is not a real ClickHouse table engine in the "ENGINE = ..." sense when used with "TO table",
+    but serves as the configuration for generating "CREATE MATERIALIZED VIEW" statements.
+    
+    Syntax: MaterializedView(to_table="target_table"[, populate=True])
+    """
+    engine_name = "MaterializedView"
+    arg_names = ("to_table",)
+    
+    def __init__(
+        self,
+        to_table: str | None = None,
+        engine: "TableEngine | None" = None,
+        populate: bool = False,
+        *args,
+        **kwargs,
+    ):
+        if to_table and populate:
+            from chorm.exceptions import ConfigurationError
+            raise ConfigurationError(
+                "Cannot use 'populate=True' with 'to_table' in MaterializedView. "
+                "ClickHouse does not support POPULATE when TO table is specified."
+            )
+        
+        if to_table and engine:
+            from chorm.exceptions import ConfigurationError
+            raise ConfigurationError(
+                "Cannot specify storage 'engine' when 'to_table' is used in MaterializedView. "
+                "The target table determines the storage engine."
+            )
+
+        if to_table is None and engine is None:
+             # Depending on use case, might default to MergeTree or fail.
+             # For now, let's allow it but DDL generation might fail or use default if handled there.
+             # But strictly, one should be present.
+             pass
+
+        self.to_table = to_table
+        self.inner_engine = engine
+        self.populate = populate
+        
+        # Initialize base with to_table if present, so it's stored in _args if needed, 
+        # but we ignore it for formatting mostly.
+        if to_table:
+            super().__init__(to_table, *args, **kwargs)
+        else:
+            super().__init__(*args, **kwargs)
+
+
+
 class Distributed(TableEngine):
     """Distributed table engine for distributed queries across cluster.
     
@@ -372,6 +425,7 @@ ENGINE_CLASSES: Dict[str, Type[TableEngine]] = {
         Set,
         Join,
         View,
+        MaterializedView,
         Distributed,
         Kafka,
         MySQL,
@@ -394,6 +448,7 @@ __all__ = [
     "Join",
     "Kafka",
     "Log",
+    "MaterializedView",
     "Memory",
     "MergeTree",
     "MySQL",

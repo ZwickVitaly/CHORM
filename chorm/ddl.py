@@ -44,7 +44,34 @@ def format_ddl(metadata: TableMetadata, *, if_not_exists: bool = False) -> str:
 
     # Some engines (like Distributed, View, etc.) don't support PRIMARY KEY, ORDER BY, etc.
     engine_name = metadata.engine.engine_name
-    supports_structure_clauses = engine_name not in ("Distributed", "View", "MaterializedView")
+    
+    if engine_name == "MaterializedView":
+        from chorm.sql.ddl import create_materialized_view
+        
+        # Extract engine parameters
+        mv_engine = metadata.engine
+        
+        # Try to get attributes from the engine instance
+        to_table = getattr(mv_engine, "to_table", None)
+        if not to_table and mv_engine.args:
+            # Fallback to args if to_table attribute is missing but args are present
+            to_table = mv_engine.args[0]
+            
+        inner_engine = getattr(mv_engine, "inner_engine", None)
+        populate = getattr(mv_engine, "populate", False)
+        select_query = metadata.select_query or ""
+        
+        stmt = create_materialized_view(
+            name=metadata.name,
+            query=select_query,
+            to_table=to_table,
+            engine=inner_engine,
+            populate=populate,
+            if_not_exists=if_not_exists
+        )
+        return stmt.to_sql()
+
+    supports_structure_clauses = engine_name not in ("Distributed", "View")
     
     clauses = []
     if supports_structure_clauses:

@@ -130,6 +130,7 @@ class TableMetadata:
     partition_by: Tuple[str, ...] = ()
     sample_by: Tuple[str, ...] = ()
     ttl: str | None = None
+    select_query: Any | None = None
 
     @property
     def column_map(self) -> Dict[str, ColumnInfo]:
@@ -152,6 +153,7 @@ class TableMeta(type):
         partition_by = mcls._normalize_clause(namespace.get("__partition_by__"))
         sample_by = mcls._normalize_clause(namespace.get("__sample_by__"))
         ttl_clause: str | None = namespace.get("__ttl__", None)
+        select_query: Any | None = namespace.get("__select__", None)
 
         # Handle Metadata - check namespace or inherited
         metadata = namespace.get("metadata")
@@ -198,6 +200,8 @@ class TableMeta(type):
                 sample_by = metadata_obj.sample_by
             if ttl_clause is None:
                 ttl_clause = metadata_obj.ttl
+            if select_query is None:
+                select_query = metadata_obj.select_query
 
         all_columns = {**inherited_columns, **columns}
 
@@ -214,6 +218,7 @@ class TableMeta(type):
             partition_by=tuple(partition_by),
             sample_by=tuple(sample_by),
             ttl=ttl_clause,
+            select_query=select_query,
         )
 
         cls.__abstract__ = namespace.get("__abstract__", False)

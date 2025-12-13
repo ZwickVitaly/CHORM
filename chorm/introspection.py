@@ -19,7 +19,7 @@ class TableIntrospector:
             SELECT name 
             FROM system.tables 
             WHERE database = %(database)s 
-            AND engine NOT LIKE '%%View%%'
+            AND (engine NOT LIKE '%%View%%' OR engine = 'MaterializedView')
             ORDER BY name
         """
         result = self.client.query(query, parameters={"database": database})
@@ -34,7 +34,8 @@ class TableIntrospector:
                 engine_full,
                 partition_key,
                 sorting_key,
-                primary_key
+                primary_key,
+                create_table_query
             FROM system.tables
             WHERE database = %(database)s AND name = %(table)s
         """
@@ -54,8 +55,11 @@ class TableIntrospector:
             "partition_key": row[2],
             "sorting_key": row[3],
             "primary_key": row[4],
+            "create_query": row[5],
             "columns": columns,
         }
+
+
 
     def get_columns(self, table: str, database: str = "default") -> List[Dict[str, Any]]:
         """Get column definitions for a table."""
@@ -279,7 +283,72 @@ class ModelGenerator:
 
         # Engine - use engine_full for Distributed and other engines with parameters
         engine = self._map_engine(table_info["engine"], table_info.get("engine_full"))
-        lines.append(f"    __engine__ = {engine}")
+        
+        # Special handling for MaterializedView
+        if table_info["engine"] == "MaterializedView":
+            create_query = table_info.get("create_query", "")
+            
+            # Parse MV definition
+            # Format: CREATE MATERIALIZED VIEW [db.]name [TO [db.]name] [ENGINE = engine] [POPULATE] AS SELECT ...
+            
+            # 1. Check for TO table
+            to_table_match = re.search(r"\sTO\s+((?:`[^`]+`|\w+)(?:\.(?:`[^`]+`|\w+))?)", create_query, re.IGNORECASE)
+            to_table = to_table_match.group(1) if to_table_match else None
+            
+            # 2. Check for POPULATE
+            # Note: POPULATE is a one-time operation and is not stored in the create query.
+            # We cannot introspect it.
+            populate = False
+
+            # 3. Check for Inner Engine
+            # If TO is not present, there must be an ENGINE clause
+            inner_engine = None
+            if not to_table:
+                # Need to extract inner engine from CREATE statement or engine_full
+                # However, engine_full for MV is just "MaterializedView", so we need to parse create_query
+                engine_match = re.search(r"\sENGINE\s*=\s*(.+?)(?:\s+(?:POPULATE|AS\s+SELECT|SETTINGS))", create_query, re.IGNORECASE | re.DOTALL)
+                if engine_match:
+                    engine_str = engine_match.group(1).strip()
+                    # Recursively map this engine string to CHORM object
+                    # We can use _map_engine but we need to parse the name and args
+                    # Simple heuristic: split by (
+                    if "(" in engine_str:
+                        ie_name = engine_str.split("(", 1)[0].strip()
+                        ie_full = engine_str
+                    else:
+                        ie_name = engine_str
+                        ie_full = engine_str + "()"
+                    
+                    inner_engine = self._map_engine(ie_name, ie_full)
+            
+            # Construct MaterializedView engine string
+            args = []
+            if to_table:
+                args.append(f'to_table="{to_table}"')
+                # Populate not allowed with TO table usually, but check just in case
+            else:
+                if inner_engine:
+                    args.append(f"engine={inner_engine}")
+                if populate:
+                    args.append("populate=True")
+
+            engine = f"MaterializedView({', '.join(args)})"
+            self.engines_used.add("MaterializedView")
+            
+            lines.append(f"    __engine__ = {engine}")
+            
+            # Parse AS SELECT
+            select_match = re.search(r"AS\s+(SELECT.*)", create_query, re.IGNORECASE | re.DOTALL)
+            if select_match:
+                select_query = select_match.group(1).strip()
+                # Determine quoting for multi-line string
+                quote = '"""' if '\n' in select_query or '"' in select_query else '"'
+                if quote == '"""' and '"""' in select_query:
+                     quote = "'''"
+                
+                lines.append(f"    __select__ = {quote}{select_query}{quote}")
+        else:
+            lines.append(f"    __engine__ = {engine}")
 
         # ORDER BY
         if table_info["sorting_key"]:
@@ -398,6 +467,9 @@ class ModelGenerator:
             return "Join()"
         elif engine == "View":
             return "View()"
+        elif engine == "MaterializedView":
+            self.engines_used.add("MaterializedView")
+            return "MaterializedView()"
         return f"MergeTree()  # TODO: Engine: {engine}"
     
     def _map_distributed_engine(self, engine_full: str) -> str:

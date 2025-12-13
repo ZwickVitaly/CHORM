@@ -33,10 +33,11 @@ class TableDiff:
     """Represents differences for a single table."""
 
     table_name: str
-    action: str  # 'create', 'drop', 'alter'
+    action: str  # 'create', 'drop', 'alter', 'recreate'
     model_metadata: Optional[TableMetadata] = None
     db_info: Optional[Dict[str, Any]] = None
     column_diffs: List[ColumnDiff] = None
+    query_modified: bool = False  # For Materialized Views
 
     def __post_init__(self):
         if self.column_diffs is None:
@@ -176,16 +177,40 @@ class MigrationGenerator:
         db_info = self.introspector.get_table_info(table_name, self.database)
 
         column_diffs = self._compare_columns(model_metadata, db_info)
+        
+        query_modified = False
+        is_mv = model_metadata.engine and model_metadata.engine.engine_name == "MaterializedView"
+        is_db_mv = db_info.get("engine") == "MaterializedView"
+        
+        if is_mv and is_db_mv:
+            # Check if query changed
+            create_query = db_info.get("create_query", "")
+            # Extract AS SELECT part
+            import re
+            select_match = re.search(r"AS\s+(SELECT.*)", create_query, re.IGNORECASE | re.DOTALL)
+            db_select = select_match.group(1).strip() if select_match else ""
+            
+            model_select = model_metadata.select_query
+            if model_select:
+                 # Normalize both for comparison
+                 # This is tricky as formatting/macros might differ
+                 # For now, simple whitespace normalization
+                 def normalize(s):
+                     return " ".join(str(s).split())
+                 
+                 if normalize(model_select) != normalize(db_select):
+                     query_modified = True
 
-        if not column_diffs:
+        if not column_diffs and not query_modified:
             return None  # No differences
 
         return TableDiff(
             table_name=table_name,
-            action="alter",
+            action="recreate" if query_modified else "alter",
             model_metadata=model_metadata,
             db_info=db_info,
             column_diffs=column_diffs,
+            query_modified=query_modified,
         )
 
     def _compare_columns(
@@ -315,6 +340,21 @@ class MigrationGenerator:
                     upgrade_lines.append('        """)')
                 upgrade_lines.append("")
 
+            elif diff.action == "recreate":
+                # Recreate table (Drop + Create)
+                upgrade_lines.append(f"        # Recreate table {diff.table_name} (Query changed)")
+                upgrade_lines.append(f"        session.execute('DROP TABLE IF EXISTS {diff.table_name}')")
+                
+                if diff.model_metadata:
+                    ddl = format_ddl(diff.model_metadata, if_not_exists=True)
+                    # Escape quotes in DDL and format as multiline string
+                    ddl_escaped = ddl.replace('"""', '\\"\\"\\"').replace("'''", "\\'\\'\\'")
+                    upgrade_lines.append('        session.execute("""')
+                    for ddl_line in ddl_escaped.split("\n"):
+                        upgrade_lines.append(f"        {ddl_line}")
+                    upgrade_lines.append('        """)')
+                upgrade_lines.append("")
+
             elif diff.action == "drop":
                  # DROP TABLE
                 upgrade_lines.append(f"        # Drop table {diff.table_name}")
@@ -365,6 +405,22 @@ class MigrationGenerator:
                 downgrade_lines.append(f"        # Drop table {diff.table_name}")
                 downgrade_lines.append(f"        session.execute('DROP TABLE IF EXISTS {diff.table_name}')")
             
+            elif diff.action == "recreate":
+                # Downgrade refresh means we need to restore previous state.
+                # Since we don't have the old model, we can't easily restore EXCEPT if we rely on db_info?
+                # But db_info is dictionary. DDL reconstruction from introspection info is possible but hard here.
+                # So we just warn or drop.
+                downgrade_lines.append(f"        # TODO: Manually restore table {diff.table_name} (was recreated)")
+                downgrade_lines.append(f"        session.execute('DROP TABLE IF EXISTS {diff.table_name}')")
+                if diff.db_info and diff.db_info.get("create_query"):
+                    create_query = diff.db_info["create_query"]
+                    # Escape appropriately
+                    create_query_esc = create_query.replace('"""', '\\"\\"\\"').replace("'''", "\\'\\'\\'")
+                    downgrade_lines.append('        session.execute("""')
+                    for ddl_line in create_query_esc.split("\n"):
+                        downgrade_lines.append(f"        {ddl_line}")
+                    downgrade_lines.append('        """)')
+
             elif diff.action == "drop":
                 # Re-create table (Hard to reconstruct perfectly without model)
                 downgrade_lines.append(f"        # TODO: Manually restore table {diff.table_name}")
