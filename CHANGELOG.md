@@ -5,16 +5,18 @@ All notable changes to CHORM will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.2.0] - 2025-12-13
-
 ### Added
 - **Materialized Views Support**: Full support for ClickHouse Materialized Views.
-    - `MaterializedView` engine class with `to_table` and `populate` support.
-    - DDL generation for `CREATE MATERIALIZED VIEW`.
-    - Introspection of Materialized Views (both `TO table` and internal engine).
-    - `__select__` attribute in Models to define view queries.
-    - Full integration with `MetaData.create_all()`.
-    - Migration support: automatically detects MV creation and query changes (triggering recreate).
+    - **Engine**: Added `MaterializedView` engine class with `to_table` and `populate` support in `chorm.table_engines`.
+    - **Declarative**: Added `__select__` attribute to `Table` and `TableMetadata` for defining view transformation logic.
+    - **DDL**: Added generation for `CREATE MATERIALIZED VIEW` with `TO [table]` and `POPULATE` clauses.
+    - **Introspection**: Added support for detecting `MaterializedView` engine, extracting target table, and parsing inner DDL.
+    - **Migrations**: Updated `auto-migrate` to detect new Materialized Views and generate `recreate` migrations when the underlying `SELECT` query changes.
+    - **Lifecycle**: Full integration with `MetaData.create_all()` and `MetaData.drop_all()`.
+
+### Changed
+- **Testing**: Added comprehensive integration tests (`tests/integration/test_mv_to_table_flow.py`) covering the full Create-Introspect-Insert-Select lifecycle for MVs.
+- **Engines**: Verified and consolidated table engine registry to ensure all ClickHouse engines (including Distributed, Kafka, etc.) remain fully supported.
 
 ## [0.1.6] - 2025-12-09
 
