@@ -144,6 +144,15 @@ class Raw(Expression):
         return self.sql
 
 
+def text(sql: str) -> Raw:
+    """Create a raw SQL expression.
+    
+    Example:
+        select(text("count(*) as c")).select_from(text("users"))
+    """
+    return Raw(sql)
+
+
 @dataclass(frozen=True)
 class FunctionCall(Expression):
     name: str

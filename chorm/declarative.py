@@ -14,8 +14,11 @@ from chorm.sql.expression import Expression
 from chorm.ddl import format_ddl
 from chorm.codecs import Codec
 from chorm.metadata import MetaData
-from chorm.exceptions import ConfigurationError, ValidationError
+from chorm.exceptions import ConfigurationError, ValidationError, CHORMError
 from chorm.validators import Validator, validate_value
+from chorm.sql.selectable import Select
+from chorm.table_engines import TableEngine, MaterializedView
+from chorm.sql.expression import Label, Identifier
 
 # Backward compatibility alias
 DeclarativeError = ConfigurationError
@@ -131,6 +134,8 @@ class TableMetadata:
     sample_by: Tuple[str, ...] = ()
     ttl: str | None = None
     select_query: Any | None = None
+    from_table: str | None = None
+    to_table: str | None = None
 
     @property
     def column_map(self) -> Dict[str, ColumnInfo]:
@@ -154,24 +159,125 @@ class TableMeta(type):
         sample_by = mcls._normalize_clause(namespace.get("__sample_by__"))
         ttl_clause: str | None = namespace.get("__ttl__", None)
         select_query: Any | None = namespace.get("__select__", None)
-
-        # Handle Metadata - check namespace or inherited
-        metadata = namespace.get("metadata")
+        from_table: Any | None = namespace.get("__from_table__", None)
+        metadata: Any | None = namespace.get("metadata", None)
+        
+        # Inherit metadata if not defined locally
         if metadata is None:
             for base in bases:
                 if hasattr(base, "metadata"):
                     metadata = base.metadata
                     break
 
-        for attr_name, attr_value in namespace.items():
-            if isinstance(attr_value, Column):
-                columns[attr_name] = attr_value
-            elif isinstance(attr_value, TableEngine):
-                if engine is not None and attr_name != "engine":
-                    continue
-                engine = attr_value
+        if from_table is not None and not isinstance(from_table, str):
+            if hasattr(from_table, "__tablename__"):
+                from_table = from_table.__tablename__
+            else:
+                from_table = str(from_table)
+        
+        if select_query is None and from_table is not None:
+             # AUTO-GENERATION: Generate Select object instead of string for strict compliance
+             # select_query = f"SELECT * FROM {from_table}"
+             # We need to construct select().select_from(from_table)
+             # Note: select() without arguments implies SELECT * in CHORM? 
+             # Select constructor: self._columns = [] -> to_sql() renders "SELECT *"
+             # So select().select_from(...) is roughly "SELECT * FROM ..."
+             select_query = Select().select_from(from_table)
+        
+        # Extract engine from namespace
+        engine = namespace.get("__engine__")
+        if engine is None:
+            engine = namespace.get("engine")
+        
+        # Extract local columns
+        for key, value in namespace.items():
+            if isinstance(value, Column):
+                value.name = key
+                columns[key] = value
+
+        # Strict Validation handles for Materialized Views
+        to_table_ref: Any | None = namespace.get("__to_table__", None)
+        to_table_name: str | None = None
 
         cls = super().__new__(mcls, name, bases, namespace, **kwargs)
+
+        # Detect if we are creating a MaterializedView
+        # We need to know the engine. It might be in namespace or inherited.
+        # But for strict validation of attributes defined in THIS class, we check namespace/engine.
+        
+        # Engine resolution logic duplicated from below for validation context
+        # (We strictly validate if the engine is explicitly MaterializedView OR if __to_table__ is set implies MV semantic)
+        
+        target_engine = engine
+        if target_engine is None and bases:
+             # Try to find inherited engine
+             for base in bases:
+                 if hasattr(base, "__table__") and base.__table__.engine:
+                     target_engine = base.__table__.engine
+                     break
+        
+        is_mv = isinstance(target_engine, MaterializedView)
+
+        if is_mv:
+            # 1. Validation: __select__ must be a Select object (if present)
+            # The Pivot requires __select__ for MVs (unless we are just defining a mixin, but usually MV requires it)
+            # If generated from older code, it might be string? User said "не принимаем текстом".
+            # strict check:
+            if select_query is not None:
+                if not isinstance(select_query, Select):
+                     raise ConfigurationError(
+                         f"Invalid '__select__' in MaterializedView '{name}'. Must be a 'chorm.select()' object, got {type(select_query).__name__}."
+                     )
+            
+            # 2. Validation: __to_table__ must be a Table subclass (if present)
+            if to_table_ref is not None:
+                # Must be a class that has TableMeta metaclass (i.e. is a Table)
+                if not isinstance(to_table_ref, TableMeta):
+                     raise ConfigurationError(
+                         f"Invalid '__to_table__' in MaterializedView '{name}'. Must be a Table class, got {type(to_table_ref).__name__}."
+                     )
+                to_table_name = to_table_ref.__tablename__
+            
+            # 3. Column Validation
+            if select_query is not None and isinstance(select_query, Select):
+                # Extract columns from query
+                query_cols = select_query._columns
+                if not query_cols: # "SELECT *"
+                     # If * is used, validation is impossible without connecting to DB.
+                     # We assume user knows what they are doing OR we warn?
+                     # User said "порядок и названия ... должно совпадать". 
+                     # Only possible if specific columns are selected.
+                     pass 
+                else: 
+                     # Get expected columns
+                     expected_cols: Sequence[Any] = []
+                     expected_source = ""
+                     
+                     if to_table_ref is not None:
+                         # Scenario A: columns from target table
+                         expected_cols = to_table_ref.__table__.columns
+                         expected_source = f"target table '{to_table_ref.__name__}'"
+                     else:
+                         # Scenario B: columns from local definitions
+                         # We need to collect valid columns from 'columns' dict (which are Column objects)
+                         # We can't reuse 'columns' dict directly because it doesn't have order guaranteed like tuple?
+                         # Actually dict follows insertion order in modern Python.
+                         # And we should check keys.
+                         # But wait, 'columns' dict only has local columns. Inherited ones?
+                         # MVs usually don't inherit schema in complex ways, but let's assume local + inherited.
+                         # We can't access 'inherited_columns' yet (calculated below).
+                         # Let's defer this check until after 'all_columns' is resolved?
+                         # Yes. We will move this block AFTER 'all_columns' resolution below.
+                         pass
+        
+        # ... (original super().__new__ called above) ...
+        # MOVED super().__new__ to START of this block to ensure CLS exists? 
+        # Actually super().__new__ creates the class object.
+        # But we were doing validation logic assuming we have 'namespace'.
+        
+        # REFACTOR: I inserted this logic BEFORE super().__new__ in the replacement block? 
+        # No, I replaced the block containing `cls = super().__new__...`.
+
 
         # Inherit columns from bases if not overridden
         base_metadata: Iterable[TableMetadata] = (
@@ -202,8 +308,90 @@ class TableMeta(type):
                 ttl_clause = metadata_obj.ttl
             if select_query is None:
                 select_query = metadata_obj.select_query
+            if from_table is None:
+                from_table = metadata_obj.from_table
 
         all_columns = {**inherited_columns, **columns}
+
+        # --- Strict MV Validation Logic ---
+        if isinstance(engine, MaterializedView):
+             # 1. Validate Types
+             if select_query is not None and not isinstance(select_query, Select):
+                 raise ConfigurationError(
+                     f"Invalid '__select__' in MaterializedView '{name}'. Must be a 'chorm.select()' object, got {type(select_query).__name__}."
+                 )
+             
+             if to_table_ref is not None:
+                 if not isinstance(to_table_ref, TableMeta):
+                     raise ConfigurationError(
+                         f"Invalid '__to_table__' in MaterializedView '{name}'. Must be a Table class, got {type(to_table_ref).__name__}."
+                     )
+                 to_table_name = to_table_ref.__tablename__
+
+             # 2. Validate Columns
+             if select_query is not None and isinstance(select_query, Select):
+                 # Get query output columns identifiers
+                 query_col_names = []
+                 for col in select_query._columns:
+                     c_name = None
+                     if hasattr(col, "alias") and col.alias:
+                         c_name = col.alias
+                     elif hasattr(col, "name"):
+                         c_name = col.name
+                     elif hasattr(col, "to_sql"):
+                         # Fallback for simple expressions if no alias?
+                         # e.g. Count(x) -> "count(x)".
+                         # But target table has specific names.
+                         # User requirement: "names (or labels) ... must match".
+                         # If it's a raw function call without label, name is ambiguous.
+                         pass
+                     
+                     if c_name is None:
+                          # If we can't determine name, and strict mode is on?
+                          # We can assume it might fail matching.
+                          c_name = "<expr>"
+                     query_col_names.append(c_name)
+                 
+                 # Resolve Expected Columns
+                 expected_info = [] # List of (name, source)
+                 expected_col_names = []
+
+                 if to_table_ref is not None:
+                     # Scenario A: Target Table
+                     for col_info in to_table_ref.__table__.columns:
+                         expected_col_names.append(col_info.name)
+                         expected_info.append(f"'{col_info.name}'")
+                     expected_source_name = f"target table '{to_table_ref.__name__}'"
+                 else:
+                     # Scenario B: Inner Engine (Local Columns)
+                     # We use 'all_columns' keys which preserve definition order?
+                     # Python dicts preserve insertion order relative to when keys were added.
+                     # 'all_columns' = inherited + columns.
+                     # This should match the DDL column order.
+                     for c_name in all_columns.keys():
+                         expected_col_names.append(c_name)
+                         expected_info.append(f"'{c_name}'")
+                     expected_source_name = f"MV '{name}' schema"
+
+                 # Perform Comparison
+                 # If query has '*', skip validation? User said strict. "Select * " is usually discouraged in MVs.
+                 # But valid.
+                 # If query cols are empty (meaning *), we skip.
+                 if query_col_names and not any(n == "*" for n in query_col_names):
+                     if len(query_col_names) != len(expected_col_names):
+                         raise ConfigurationError(
+                             f"Column count mismatch in MaterializedView '{name}'. "
+                             f"Expected {len(expected_col_names)} columns from {expected_source_name} "
+                             f"({', '.join(expected_info)}), but '__select__' query returns {len(query_col_names)} columns."
+                         )
+                     
+                     for idx, (exp, got) in enumerate(zip(expected_col_names, query_col_names)):
+                         if exp != got:
+                            raise ConfigurationError(
+                                f"Column mismatch in MaterializedView '{name}'. "
+                                f"Expected column '{exp}' at index {idx} from {expected_source_name}, "
+                                f"but got '{got}' from '__select__' query."
+                            )
 
         if engine is None:
             engine = inherited_engine
@@ -219,6 +407,8 @@ class TableMeta(type):
             sample_by=tuple(sample_by),
             ttl=ttl_clause,
             select_query=select_query,
+            from_table=from_table,
+            to_table=to_table_name,
         )
 
         cls.__abstract__ = namespace.get("__abstract__", False)

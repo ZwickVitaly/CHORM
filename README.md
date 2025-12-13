@@ -540,6 +540,30 @@ stats = bulk_insert(client, "users", df, batch_size=100_000)
 
 See [examples/batch_insert_demo.py](examples/batch_insert_demo.py) for complete examples.
 
+### Pandas Integration
+
+CHORM integrates seamlessly with Pandas for both inserting and querying data.
+
+**Query to DataFrame:**
+
+```python
+from chorm import select
+
+# Synchronous Session
+df = session.query_df(select(User).where(User.id > 0))
+
+# Asynchronous Session
+df = await session.query_df(select(User).where(User.id > 0))
+
+# Using raw SQL
+df = session.query_df("SELECT * FROM users WHERE id > 0")
+```
+
+**Insert from DataFrame:**
+
+See [DataFrame Support](#dataframe-support) in Batch Insert section.
+
+
 ## Advanced Features
 
 ### Performance Operations
@@ -608,6 +632,42 @@ query = select(
     dict_get("user_dict", "country", Order.user_id).label("user_country")
 ).select_from(Order)
 ```
+
+### Materialized Views
+
+CHORM provides first-class support for Materialized Views.
+
+**Declarative Definition:**
+
+```python
+from chorm import Table, Column, MaterializedView, MergeTree, select
+from chorm.types import UInt64, String
+
+# 1. Define Source Table
+class User(Table):
+    __tablename__ = "users"
+    __engine__ = MergeTree()
+    id = Column(UInt64(), primary_key=True)
+    name = Column(String())
+
+# 2. Define Materialized View
+class UserMV(Table):
+    __tablename__ = "users_mv"
+    # Reference the source table class directly
+    __engine__ = MaterializedView(to_table=User)
+    
+    # Auto-generate 'SELECT * FROM users'
+    __from_table__ = User
+    
+    # OR define custom logic
+    # __select__ = select(User.id, User.name).where(User.id > 100)
+    
+    # Define columns if needed (introspected automatically if simple view)
+```
+
+**Introspection:**
+
+Run `chorm introspect` to generate clean model code for existing Materialized Views, including class references and dependencies.
 
 ### Query Observability
 

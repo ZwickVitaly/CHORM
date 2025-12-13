@@ -54,9 +54,16 @@ def test_declarative_mv_ddl():
         id = Column(UInt64())
         val = Column(UInt64())
 
+    class Target(Table):
+        __tablename__ = "target"
+        __engine__ = MergeTree()
+        id = Column(UInt64())
+        val = Column(UInt64())
+
     class View(Table):
         __tablename__ = "view"
-        __engine__ = MaterializedView(to_table="target")  # populate=True removed
+        __engine__ = MaterializedView()
+        __to_table__ = Target
         # We need to construct a query. In declarative, often we can't refer to other models easily at class creation time
         # if they are not fully initialized, but here they are local.
         __select__ = select(Source.id, Source.val).select_from(Source)
@@ -80,6 +87,10 @@ def test_declarative_mv_with_inner_engine():
     class View(Table):
         __tablename__ = "mv_inner"
         __engine__ = MaterializedView(engine=MergeTree(), populate=True)
+        # Strict VM requires local columns definition matching select
+        # SELECT Source.id -> expects local column 'id' (or matching name)
+        id = Column(UInt64())
+        
         __select__ = select(Source.id).select_from(Source)
 
     ddl = View.create_table()

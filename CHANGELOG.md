@@ -5,18 +5,32 @@ All notable changes to CHORM will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-### Added
-- **Materialized Views Support**: Full support for ClickHouse Materialized Views.
-    - **Engine**: Added `MaterializedView` engine class with `to_table` and `populate` support in `chorm.table_engines`.
-    - **Declarative**: Added `__select__` attribute to `Table` and `TableMetadata` for defining view transformation logic.
-    - **DDL**: Added generation for `CREATE MATERIALIZED VIEW` with `TO [table]` and `POPULATE` clauses.
-    - **Introspection**: Added support for detecting `MaterializedView` engine, extracting target table, and parsing inner DDL.
-    - **Migrations**: Updated `auto-migrate` to detect new Materialized Views and generate `recreate` migrations when the underlying `SELECT` query changes.
-    - **Lifecycle**: Full integration with `MetaData.create_all()` and `MetaData.drop_all()`.
+## [0.2.1] - 2025-12-14
 
-### Changed
-- **Testing**: Added comprehensive integration tests (`tests/integration/test_mv_to_table_flow.py`) covering the full Create-Introspect-Insert-Select lifecycle for MVs.
-- **Engines**: Verified and consolidated table engine registry to ensure all ClickHouse engines (including Distributed, Kafka, etc.) remain fully supported.
+### Added
+- **Refactored Declarative API for MVs**:
+    - Support for class references in `MaterializedView(to_table=User)`.
+    - `__from_table__` attribute for auto-generating simple `SELECT *` views without manual SQL.
+- **Enhanced Introspection**: 
+    - Generates pythonic model code using class references for Materialized Views.
+    - Improved topological sorting of generated models (tables before views).
+- **Pandas Integration**: Added `query_df()` to `Engine`, `Session`, `AsyncEngine`, and `AsyncSession` for direct DataFrame export (requires `pandas`).
+- **Async Improvements**: Implemented lazy iteration and tuple access for `AsyncSession` results.
+
+### Fixed
+- **Testing**: Fixed mocking in `test_pandas_and_async.py` preventing accidental connection attempts during tests.
+
+## [0.2.0] - 2025-12-13
+
+### Added
+- **Materialized Views Support**:
+    - **Engine**: Added `MaterializedView` engine class.
+    - **Declarative**: Added `__select__` attribute to define view queries.
+    - **DDL**: Support for `CREATE MATERIALIZED VIEW`.
+    - **Migrations**: Auto-migration support for creating and updating Materialized Views.
+    - **Introspection**: Basic introspection of Materialized Views.
+- **Performance**: Implemented lazy result iteration (`Result` object is now an iterator).
+- **Testing**: Added `tests/test_materialized_views.py` and integration tests.
 
 ## [0.1.6] - 2025-12-09
 

@@ -1,6 +1,6 @@
 """Public interface for the CHORM package."""
 
-__version__ = "0.2.0"
+__version__ = "0.2.1"
 
 from chorm.async_engine import AsyncConnection, AsyncEngine, create_async_engine
 from chorm.async_pool import AsyncConnectionPool
@@ -67,6 +67,7 @@ from chorm.sql import (
     func,
     insert,
     select,
+    text,
     update,
     cte,
     window,
@@ -201,6 +202,7 @@ __all__ = [
     "func",
     "insert",
     "select",
+    "text",
     "update",
     "cte",
     "window",

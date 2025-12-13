@@ -4,6 +4,7 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime
 import clickhouse_connect
 import re
+from chorm.table_engines import ENGINE_CLASSES
 
 
 class TableIntrospector:
@@ -295,6 +296,20 @@ class ModelGenerator:
             to_table_match = re.search(r"\sTO\s+((?:`[^`]+`|\w+)(?:\.(?:`[^`]+`|\w+))?)", create_query, re.IGNORECASE)
             to_table = to_table_match.group(1) if to_table_match else None
             
+            # Resolve TO table to class if possible
+            table_map = getattr(self, "table_to_class", {})
+            if to_table:
+                # Remove quotes if present
+                clean_to_table = to_table.replace("`", "").replace('"', "").replace("'", "")
+                if clean_to_table in table_map:
+                    # Use class reference
+                    to_table_ref = table_map[clean_to_table]
+                else:
+                    # Use string literal
+                    to_table_ref = f'"{to_table}"'
+            else:
+                to_table_ref = None
+
             # 2. Check for POPULATE
             # Note: POPULATE is a one-time operation and is not stored in the create query.
             # We cannot introspect it.
@@ -321,32 +336,60 @@ class ModelGenerator:
                     
                     inner_engine = self._map_engine(ie_name, ie_full)
             
-            # Construct MaterializedView engine string
-            args = []
-            if to_table:
-                args.append(f'to_table="{to_table}"')
-                # Populate not allowed with TO table usually, but check just in case
+            # Construct MaterializedView definition
+            if to_table_ref:
+                lines.append(f"    __to_table__ = {to_table_ref}")
+                engine = "MaterializedView()"
             else:
+                args = []
                 if inner_engine:
                     args.append(f"engine={inner_engine}")
                 if populate:
                     args.append("populate=True")
+                engine = f"MaterializedView({', '.join(args)})"
 
-            engine = f"MaterializedView({', '.join(args)})"
             self.engines_used.add("MaterializedView")
-            
             lines.append(f"    __engine__ = {engine}")
             
             # Parse AS SELECT
             select_match = re.search(r"AS\s+(SELECT.*)", create_query, re.IGNORECASE | re.DOTALL)
             if select_match:
                 select_query = select_match.group(1).strip()
-                # Determine quoting for multi-line string
-                quote = '"""' if '\n' in select_query or '"' in select_query else '"'
-                if quote == '"""' and '"""' in select_query:
-                     quote = "'''"
                 
-                lines.append(f"    __select__ = {quote}{select_query}{quote}")
+                # Check for simple "SELECT * FROM table"
+                # Regex: starts with SELECT * FROM, then table name, end of string (ignoring whitespace/semicolon)
+                simple_match = re.search(r"^SELECT\s+\*\s+FROM\s+([`'\"\w\.]+)\s*;?\s*$", select_query, re.IGNORECASE)
+                used_from_table = False
+                
+                if simple_match:
+                    from_table_raw = simple_match.group(1)
+                    clean_from_table = from_table_raw.replace("`", "").replace('"', "").replace("'", "")
+                    
+                    if clean_from_table in table_map:
+                        # Use class reference
+                        lines.append(f"    __from_table__ = {table_map[clean_from_table]}")
+                        used_from_table = True
+                    # If not in map, we could use string, but maybe safer to keep explicit query?
+                    # User asked for __from_table__ support. Let's use string if table not found but simple query.
+                    else:
+                         lines.append(f"    __from_table__ = '{from_table_raw}'")
+                         used_from_table = True
+
+                if not used_from_table:
+                    # Determine quoting for multi-line string
+                    quote = '"""' if '\n' in select_query or '"' in select_query else '"'
+                    if quote == '"""' and '"""' in select_query:
+                         quote = "'''"
+                    
+                    # Generate select(cols).select_from(text(raw_query)) to satisfy strict validation
+                    # 1. Collect column names
+                    col_args = []
+                    for col in table_info["columns"]:
+                        col_args.append(f'text("{col["name"]}")')
+                    
+                    cols_str = ", ".join(col_args)
+                    
+                    lines.append(f"    __select__ = select({cols_str}).select_from(text({quote}{select_query}{quote}))")
         else:
             lines.append(f"    __engine__ = {engine}")
 
@@ -758,6 +801,12 @@ class ModelGenerator:
         """Generate import statements."""
         lines = []
         lines.append("from chorm import Table, Column")
+        
+        # Add SQL helpers if MVs are used
+        if "MaterializedView" in self.engines_used:
+             lines.append("from chorm import select, text")
+             # func might be needed if we attempt to parse simple queries but for now text wrapper is used.
+
 
         # Type imports (filter out 'func' as it's imported separately)
         type_imports = sorted(imp for imp in self.imports if imp != "func")
@@ -768,19 +817,21 @@ class ModelGenerator:
         if "func" in self.imports:
             lines.append("from chorm.sql.expression import func")
 
-        # Engine imports - collect from used engines
-        engine_list = ["MergeTree"]  # Always include MergeTree
-        if "Distributed" in self.engines_used:
-            engine_list.append("Distributed")
-        if "ReplacingMergeTree" in self.engines_used:
-            engine_list.append("ReplacingMergeTree")
-        if "SummingMergeTree" in self.engines_used:
-            engine_list.append("SummingMergeTree")
-        if "AggregatingMergeTree" in self.engines_used:
-            engine_list.append("AggregatingMergeTree")
+        # Engine imports - cleanup to use engines_used directly where possible
+        # But we need to ensure we only import what is available in table_engines
+        available_engines = set(ENGINE_CLASSES.keys())
         
+        # MergeTree is default base, always useful? Maybe not if strict.
+        # But existing code enforced it. Let's keep it if no other engine? 
+        # Actually better to just import what is used.
         
-        lines.append(f"from chorm.table_engines import {', '.join(sorted(set(engine_list)))}")
+        engines_to_import = {"MergeTree"} # Default often used as fallback
+        for engine in self.engines_used:
+            # Handle parameterized engines (strip params if stored with them? No, engines_used stores name)
+            if engine in available_engines:
+                engines_to_import.add(engine)
+        
+        lines.append(f"from chorm.table_engines import {', '.join(sorted(engines_to_import))}")
         
         # Codec imports
         if self.codecs_used:
@@ -790,6 +841,20 @@ class ModelGenerator:
 
     def generate_file(self, tables_info: List[Dict[str, Any]]) -> str:
         """Generate complete models.py file."""
+        # 1. Build map of table_name -> class_name
+        self.table_to_class: Dict[str, str] = {
+            t["name"]: self._to_class_name(t["name"]) 
+            for t in tables_info
+        }
+
+        # 2. Sort tables: Regular tables first, then MaterializedViews
+        # This ensures MVs can reference Table classes defined earlier
+        def sort_key(t):
+            priority = 1 if t["engine"] == "MaterializedView" else 0
+            return (priority, t["name"])
+        
+        sorted_tables = sorted(tables_info, key=sort_key)
+
         lines = []
         lines.append('"""')
         lines.append("Generated by chorm-cli introspect")
@@ -798,19 +863,16 @@ class ModelGenerator:
         lines.append("")
 
         # Generate all models first to collect imports
-        models = []
-        for table_info in tables_info:
-            models.append(self.generate_model(table_info))
+        models_code = []
+        for table_info in sorted_tables:
+            models_code.append(self.generate_model(table_info))
+            models_code.append("")
+            models_code.append("")
 
-        # Add imports
+        # Generate imports after collecting types/engines
         lines.append(self.generate_imports())
         lines.append("")
         lines.append("")
-
-        # Add models
-        for model in models:
-            lines.append(model)
-            lines.append("")
-            lines.append("")
+        lines.extend(models_code)
 
         return "\n".join(lines)

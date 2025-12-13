@@ -51,8 +51,12 @@ def format_ddl(metadata: TableMetadata, *, if_not_exists: bool = False) -> str:
         # Extract engine parameters
         mv_engine = metadata.engine
         
-        # Try to get attributes from the engine instance
-        to_table = getattr(mv_engine, "to_table", None)
+        # Try to get attributes from the engine instance or metadata
+        to_table = metadata.to_table
+        if not to_table:
+            # Fallback to engine attribute (backward compatibility or programmatic usage)
+            to_table = getattr(mv_engine, "to_table", None)
+        
         if not to_table and mv_engine.args:
             # Fallback to args if to_table attribute is missing but args are present
             to_table = mv_engine.args[0]

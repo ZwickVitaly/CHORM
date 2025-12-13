@@ -310,21 +310,27 @@ class MaterializedView(TableEngine):
     
     def __init__(
         self,
-        to_table: str | None = None,
+        to_table: str | Any | None = None,
         engine: "TableEngine | None" = None,
         populate: bool = False,
         *args,
         **kwargs,
     ):
+        # Resolve to_table if it's a class (Table model)
+        if to_table is not None and not isinstance(to_table, str):
+            if hasattr(to_table, "__tablename__"):
+                to_table = to_table.__tablename__
+            else:
+                # Fallback or error? defaulting to str conversion might be risky if it's just 'Model'
+                to_table = str(to_table)
+
         if to_table and populate:
-            from chorm.exceptions import ConfigurationError
             raise ConfigurationError(
                 "Cannot use 'populate=True' with 'to_table' in MaterializedView. "
                 "ClickHouse does not support POPULATE when TO table is specified."
             )
         
         if to_table and engine:
-            from chorm.exceptions import ConfigurationError
             raise ConfigurationError(
                 "Cannot specify storage 'engine' when 'to_table' is used in MaterializedView. "
                 "The target table determines the storage engine."

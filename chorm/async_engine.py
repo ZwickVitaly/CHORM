@@ -125,6 +125,21 @@ class AsyncEngine:
         async with self.connection(settings=settings, **overrides) as connection:
             return await connection.query(sql, parameters=parameters, settings=settings)
 
+    async def query_df(
+        self,
+        sql: str,
+        *,
+        parameters: Mapping[str, Any] | Sequence[Any] | None = None,
+        settings: Mapping[str, Any] | None = None,
+        **overrides: Any,
+    ) -> Any:
+        """Execute a query and return a pandas DataFrame.
+        
+        Requires pandas to be installed.
+        """
+        async with self.connection(settings=settings, **overrides) as connection:
+            return await connection.query_df(sql, parameters=parameters, settings=settings)
+
     async def _create_connection(
         self,
         *,
@@ -223,6 +238,16 @@ class AsyncConnection:
         **kwargs: Any,
     ) -> Any:
         return await self._client.query(sql, parameters=parameters, settings=settings, **kwargs)
+
+    async def query_df(
+        self,
+        sql: str,
+        *,
+        parameters: Mapping[str, Any] | Sequence[Any] | None = None,
+        settings: Mapping[str, Any] | None = None,
+        **kwargs: Any,
+    ) -> Any:
+        return await self._client.query_df(sql, parameters=parameters, settings=settings, **kwargs)
 
     async def execute(
         self,

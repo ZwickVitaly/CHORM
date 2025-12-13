@@ -302,6 +302,21 @@ class Engine:
         with self.connect(settings=settings, **overrides) as connection:
             return connection.query(sql, parameters=parameters, settings=settings)
 
+    def query_df(
+        self,
+        sql: str,
+        *,
+        parameters: Mapping[str, Any] | Sequence[Any] | None = None,
+        settings: Mapping[str, Any] | None = None,
+        **overrides: Any,
+    ) -> Any:
+        """Execute a query and return a pandas DataFrame.
+        
+        Requires pandas to be installed.
+        """
+        with self.connect(settings=settings, **overrides) as connection:
+            return connection.query_df(sql, parameters=parameters, settings=settings)
+
     def _create_client(self, *, settings: Mapping[str, Any] | None = None, **overrides: Any) -> Any:
         client_kwargs = {
             "host": self._config.host,
@@ -385,6 +400,16 @@ class Connection:
         **kwargs: Any,
     ) -> Any:
         return self._client.query(sql, parameters=parameters, settings=settings, **kwargs)
+
+    def query_df(
+        self,
+        sql: str,
+        *,
+        parameters: Mapping[str, Any] | Sequence[Any] | None = None,
+        settings: Mapping[str, Any] | None = None,
+        **kwargs: Any,
+    ) -> Any:
+        return self._client.query_df(sql, parameters=parameters, settings=settings, **kwargs)
 
     def execute(
         self,

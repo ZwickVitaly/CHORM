@@ -100,7 +100,14 @@ class Select(Expression):
     """Represents a SELECT statement."""
 
     def __init__(self, *columns: Any) -> None:
-        self._columns: List[Expression] = [_coerce(c) for c in columns]
+        self._columns: List[Expression] = []
+        for c in columns:
+            if hasattr(c, "__tablename__") and hasattr(c, "__table__") and hasattr(c.__table__, "columns"):
+                 # Handle Table class: expand to all columns
+                 for col_info in c.__table__.columns:
+                     self._columns.append(col_info.column)
+            else:
+                 self._columns.append(_coerce(c))
         self._from: Optional[Expression] = None
         self._joins: List[Union[JoinClause, ArrayJoinClause]] = []
         self._where_criteria: List[Expression] = []

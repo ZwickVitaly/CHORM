@@ -108,6 +108,23 @@ class AsyncSession:
         """Close the session."""
         self._pending_inserts.clear()
 
+    async def query_df(self, statement: Any, parameters: Optional[Dict[str, Any]] = None) -> Any:
+        """Execute a query and return a pandas DataFrame asynchronously.
+        
+        Args:
+            statement: SQL statement (string or selectable object)
+            parameters: Optional dictionary of parameters
+            
+        Returns:
+            pandas.DataFrame
+        """
+        if isinstance(statement, Select):
+            sql = statement.to_sql()
+        else:
+            sql = str(statement)
+            
+        return await self.bind.query_df(sql, parameters=parameters)
+
     async def __aenter__(self) -> AsyncSession:
         """Async context manager entry."""
         return self

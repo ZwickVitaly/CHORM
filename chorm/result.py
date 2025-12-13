@@ -141,6 +141,21 @@ class Result(Generic[T]):
         )
 
 
+    def __iter__(self):
+        """Yield rows lazily.
+
+        Yields:
+            Row or Model instance depending on configuration.
+        """
+        if self._model:
+            for row in self._rows:
+                row_dict = dict(zip(self._columns, row))
+                yield self._model(**row_dict)
+        else:
+            for row in self._rows:
+                yield Row(row, self._columns)
+
+
 class ScalarResult(Generic[T]):
     """Result wrapper for scalar values."""
 
@@ -148,10 +163,17 @@ class ScalarResult(Generic[T]):
         self._result = result
         self._column = column
 
-    def all(self) -> List[Any]:
-        """Return all scalar values."""
+    def __iter__(self):
+        """Yield scalar values lazily."""
         if self._result._model:
-            return self._result.all()
+            # If using model, iterating gives model instances, but ScalarResult specifically 
+            # implies extracting a column. However, scalar() on a model query usually 
+            # returns the model instance if it's the only thing selected.
+            # But the original all() implementation returns model instances if model is set.
+            # Let's align with all().
+            for item in self._result:
+                yield item
+            return
 
         # Get column index
         if isinstance(self._column, str):
@@ -162,36 +184,56 @@ class ScalarResult(Generic[T]):
         else:
             col_idx = self._column
 
-        # Return specified column of each row
-        return [row[col_idx] for row in self._result._rows]
+        for row in self._result._rows:
+            yield row[col_idx]
+
+    def all(self) -> List[Any]:
+        """Return all scalar values."""
+        return list(self)
 
     def first(self) -> Optional[Any]:
         """Return the first scalar value."""
-        all_res = self.all()
-        return all_res[0] if all_res else None
+        # Optimized to avoid creating full iterator
+        if not self._result._rows:
+            return None
+            
+        if self._result._model:
+            # Use Result.first() logic
+            return self._result.first()
+            
+        # Get column index
+        if isinstance(self._column, str):
+            try:
+                col_idx = self._result._columns.index(self._column)
+            except ValueError:
+                raise ValueError(f"Column '{self._column}' not found in result")
+        else:
+            col_idx = self._column
+            
+        return self._result._rows[0][col_idx]
 
     def one(self) -> Any:
         """Return exactly one scalar value."""
-        all_res = self.all()
-        if len(all_res) == 1:
-            return all_res[0]
-        if not all_res:
+        rows = self._result._rows
+        if len(rows) == 1:
+            return self.first()
+        if not rows:
             raise NoResultFound(
                 "Query returned no results. " "Use .first() or .scalar_one_or_none() if this is expected."
             )
         raise MultipleResultsFound(
-            f"Query returned {len(all_res)} results, expected 1. " f"Use .first() or add .limit(1) to your query."
+            f"Query returned {len(rows)} results, expected 1. " f"Use .first() or add .limit(1) to your query."
         )
 
     def one_or_none(self) -> Optional[Any]:
         """Return one scalar value or None."""
-        all_res = self.all()
-        if len(all_res) == 1:
-            return all_res[0]
-        if not all_res:
+        rows = self._result._rows
+        if len(rows) == 1:
+            return self.first()
+        if not rows:
             return None
         raise MultipleResultsFound(
-            f"Query returned {len(all_res)} results, expected 0 or 1. " f"Use .first() or add .limit(1) to your query."
+            f"Query returned {len(rows)} results, expected 0 or 1. " f"Use .first() or add .limit(1) to your query."
         )
 
     def scalar(self) -> Optional[Any]:
@@ -213,20 +255,26 @@ class MappingResult:
     def __init__(self, result: Result) -> None:
         self._result = result
 
+    def __iter__(self):
+        """Yield rows as dicts lazily."""
+        for row in self._result._rows:
+            yield dict(zip(self._result._columns, row))
+
     def all(self) -> List[dict]:
         """Return all rows as dicts."""
-        return [dict(zip(self._result._columns, row)) for row in self._result._rows]
+        return list(self)
 
     def first(self) -> Optional[dict]:
         """Return first row as dict or None."""
-        rows = self.all()
-        return rows[0] if rows else None
+        if not self._result._rows:
+            return None
+        return dict(zip(self._result._columns, self._result._rows[0]))
 
     def one(self) -> dict:
         """Return exactly one row as dict."""
-        rows = self.all()
+        rows = self._result._rows
         if len(rows) == 1:
-            return rows[0]
+            return self.first()
         if not rows:
             raise NoResultFound("Query returned no results. " "Use .first() or .one_or_none() if this is expected.")
         raise MultipleResultsFound(
@@ -235,9 +283,9 @@ class MappingResult:
 
     def one_or_none(self) -> Optional[dict]:
         """Return one row as dict or None."""
-        rows = self.all()
+        rows = self._result._rows
         if len(rows) == 1:
-            return rows[0]
+            return self.first()
         if not rows:
             return None
         raise MultipleResultsFound(
@@ -250,6 +298,10 @@ class TupleResult:
 
     def __init__(self, result: Result) -> None:
         self._result = result
+
+    def __iter__(self):
+        """Yield rows as tuples lazily."""
+        return iter(self._result._rows)
 
     def all(self) -> List[tuple]:
         """Return all rows as tuples."""

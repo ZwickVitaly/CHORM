@@ -12,6 +12,9 @@ from chorm.batch import (
 )
 
 
+# Suppress DeprecationWarnings for legacy batch classes tested here
+pytestmark = pytest.mark.filterwarnings("ignore::DeprecationWarning")
+
 class TestBatchInsert:
     """Test BatchInsert class."""
 

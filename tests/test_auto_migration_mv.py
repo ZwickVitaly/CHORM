@@ -18,6 +18,7 @@ class View(Table):
     __tablename__ = "view"
     __engine__ = MaterializedView(to_table="target")
     __select__ = select(Source.id).select_from(Source)
+    id = Column(UInt64())
 
 def test_migration_generator_create_mv():
     # Setup
