@@ -1,6 +1,6 @@
 """Public interface for the CHORM package."""
 
-__version__ = "0.1.1"
+__version__ = "0.2.0"
 
 from chorm.async_engine import AsyncConnection, AsyncEngine, create_async_engine
 from chorm.async_pool import AsyncConnectionPool
@@ -152,6 +152,7 @@ from chorm.table_engines import (
     PostgreSQL,
     ODBC,
     JDBC,
+    MaterializedView,
 )
 
 __all__ = [
@@ -292,6 +293,7 @@ __all__ = [
     "PostgreSQL",
     "ODBC",
     "JDBC",
+    "MaterializedView",
     # Codecs
     "Codec",
     "ZSTD",

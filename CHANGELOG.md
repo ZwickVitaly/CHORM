@@ -5,6 +5,17 @@ All notable changes to CHORM will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2025-12-13
+
+### Added
+- **Materialized Views Support**: Full support for ClickHouse Materialized Views.
+    - `MaterializedView` engine class with `to_table` and `populate` support.
+    - DDL generation for `CREATE MATERIALIZED VIEW`.
+    - Introspection of Materialized Views (both `TO table` and internal engine).
+    - `__select__` attribute in Models to define view queries.
+    - Full integration with `MetaData.create_all()`.
+    - Migration support: automatically detects MV creation and query changes (triggering recreate).
+
 ## [0.1.6] - 2025-12-09
 
 ### Fixed
