@@ -15,7 +15,10 @@ class TableIntrospector:
         self.client = client
 
     def get_tables(self, database: str = "default") -> List[str]:
-        """Get list of all tables in database."""
+        """Get list of all tables in database.
+        
+        Returns qualified names (database.table) when database is not 'default'.
+        """
         query = """
             SELECT name 
             FROM system.tables 
@@ -24,10 +27,26 @@ class TableIntrospector:
             ORDER BY name
         """
         result = self.client.query(query, parameters={"database": database})
-        return [row[0] for row in result.result_rows]
+        tables = [row[0] for row in result.result_rows]
+        
+        # Return qualified names for non-default databases
+        if database and database != "default":
+            return [f"{database}.{t}" for t in tables]
+        return tables
 
     def get_table_info(self, table: str, database: str = "default") -> Dict[str, Any]:
-        """Get complete table information."""
+        """Get complete table information.
+        
+        Args:
+            table: Table name or qualified name (database.table)
+            database: Database name (overridden if table contains database prefix)
+        """
+        # Parse qualified name if provided (e.g., "radar.products")
+        if "." in table:
+            parts = table.split(".", 1)
+            database = parts[0]
+            table = parts[1]
+        
         # Get table metadata
         query = """
             SELECT 
@@ -51,6 +70,7 @@ class TableIntrospector:
 
         return {
             "name": table,
+            "database": database,
             "engine": row[0],
             "engine_full": row[1],
             "partition_key": row[2],
@@ -166,10 +186,22 @@ class ModelGenerator:
             self.imports.add("Map")
             return f"Map({key_type}, {val_type})"
 
-        # Handle Tuple
+        # Handle Tuple - parse all element types
         if ch_type.startswith("Tuple("):
             self.imports.add("Tuple")
-            return f"String()  # TODO: Define Tuple structure from: {ch_type}"
+            # Extract inner content
+            inner = ch_type[6:-1]  # Remove "Tuple(" and ")"
+            
+            # Parse tuple elements - can be named (name Type) or unnamed (Type)
+            # Examples:
+            #   Tuple(UInt64, String) -> Tuple(UInt64(), String())
+            #   Tuple(id UInt64, name String) -> Tuple(UInt64(), String())
+            #   Tuple(Array(String), UInt32) -> Tuple(Array(String()), UInt32())
+            elements = self._parse_tuple_elements(inner)
+            
+            # Map each element type
+            mapped_elements = [self.map_type(elem_type) for elem_type in elements]
+            return f"Tuple({', '.join(mapped_elements)})"
 
         # Handle FixedString
         if ch_type.startswith("FixedString("):
@@ -179,8 +211,13 @@ class ModelGenerator:
 
         # Handle DateTime64
         if ch_type.startswith("DateTime64("):
-            precision = ch_type[11:-1].split(",")[0]
+            inner = ch_type[11:-1]
+            parts = inner.split(",")
+            precision = parts[0].strip()
+            timezone = parts[1].strip().strip("'") if len(parts) > 1 else None
             self.imports.add("DateTime64")
+            if timezone:
+                return f"DateTime64(precision={precision}, timezone='{timezone}')"
             return f"DateTime64(precision={precision})"
 
         # Handle Decimal
@@ -192,18 +229,39 @@ class ModelGenerator:
         ):
             self.imports.add("Decimal")
             # Extract precision and scale if possible
-
             match = re.search(r"Decimal\d*\((\d+),\s*(\d+)\)", ch_type)
             if match:
                 precision, scale = match.groups()
                 return f"Decimal({precision}, {scale})"
             else:
+                # Decimal32(S), Decimal64(S), Decimal128(S) - S is scale only
+                single_arg_match = re.search(r"Decimal(32|64|128)\((\d+)\)", ch_type)
+                if single_arg_match:
+                    variant, scale = single_arg_match.groups()
+                    # Precision based on variant
+                    precision_map = {'32': 9, '64': 18, '128': 38}
+                    precision = precision_map[variant]
+                    return f"Decimal({precision}, {scale})"
                 return f"Decimal(18, 2)  # TODO: Verify precision/scale"
 
-        # Handle Enum
+        # Handle Enum - parse all members
         if ch_type.startswith("Enum8(") or ch_type.startswith("Enum16("):
-            self.imports.add("Enum8" if "Enum8" in ch_type else "Enum16")
-            return f"String()  # TODO: Use Enum8/Enum16 with values from: {ch_type}"
+            enum_type = "Enum8" if ch_type.startswith("Enum8(") else "Enum16"
+            self.imports.add(enum_type)
+            
+            # Extract inner content: 'val1' = 1, 'val2' = 2
+            prefix_len = 6 if enum_type == "Enum8" else 7  # len("Enum8(") or len("Enum16(")
+            inner = ch_type[prefix_len:-1]
+            
+            # Parse enum members
+            members = self._parse_enum_members(inner)
+            
+            if members:
+                # Generate EnumType with members dict
+                members_str = ", ".join(f"'{k}': {v}" for k, v in members.items())
+                return f"{enum_type}({{{members_str}}})"
+            else:
+                return f"String()  # TODO: Failed to parse Enum: {ch_type}"
 
         # Handle AggregateFunction
         if ch_type.startswith("AggregateFunction("):
@@ -264,6 +322,50 @@ class ModelGenerator:
             else:
                 return f'AggregateFunction({func_expr})'
 
+        # Handle SimpleAggregateFunction
+        if ch_type.startswith("SimpleAggregateFunction("):
+            # Parse: SimpleAggregateFunction(func_name, arg_types...)
+            inner = ch_type[24:-1]  # Remove "SimpleAggregateFunction(" and ")"
+            
+            # Parse function name and arguments (same logic as AggregateFunction)
+            parts = []
+            depth = 0
+            current_part = ""
+            
+            for char in inner:
+                if char == "(":
+                    depth += 1
+                    current_part += char
+                elif char == ")":
+                    depth -= 1
+                    current_part += char
+                elif char == "," and depth == 0:
+                    if current_part.strip():
+                        parts.append(current_part.strip())
+                    current_part = ""
+                else:
+                    current_part += char
+            
+            if current_part.strip():
+                parts.append(current_part.strip())
+            
+            func_name = parts[0] if parts else ""
+            arg_types = parts[1:] if len(parts) > 1 else []
+            
+            # Map argument types
+            mapped_arg_types = [self.map_type(arg_type) for arg_type in arg_types]
+            
+            self.imports.add("SimpleAggregateFunction")
+            self.imports.add("func")
+            
+            func_expr = self._map_function_to_func(func_name)
+            
+            if mapped_arg_types:
+                arg_types_str = ", ".join(mapped_arg_types)
+                return f'SimpleAggregateFunction({func_expr}, {arg_types_str})'
+            else:
+                return f'SimpleAggregateFunction({func_expr})'
+
         # Simple types
         base_type = ch_type.split("(")[0]
         if base_type in self.TYPE_MAPPING:
@@ -281,6 +383,11 @@ class ModelGenerator:
         lines = []
         lines.append(f"class {class_name}(Table):")
         lines.append(f"    __tablename__ = '{table_info['name']}'")
+        
+        # Add __database__ if not default
+        database = table_info.get("database", "default")
+        if database and database != "default":
+            lines.append(f"    __database__ = '{database}'")
 
         # Engine - use engine_full for Distributed and other engines with parameters
         engine = self._map_engine(table_info["engine"], table_info.get("engine_full"))
@@ -490,8 +597,16 @@ class ModelGenerator:
             elif "Aggregating" in engine:
                 self.engines_used.add("AggregatingMergeTree")
                 return "AggregatingMergeTree()"
+            elif "VersionedCollapsing" in engine:
+                self.engines_used.add("VersionedCollapsingMergeTree")
+                if engine_full and "VersionedCollapsingMergeTree(" in engine_full:
+                    return self._map_versioned_collapsing_engine(engine_full)
+                return "VersionedCollapsingMergeTree(sign_column='sign', version_column='version')  # TODO: extract from engine_full"
             elif "Collapsing" in engine:
-                return "CollapsingMergeTree()"
+                self.engines_used.add("CollapsingMergeTree")
+                if engine_full and "CollapsingMergeTree(" in engine_full:
+                    return self._map_collapsing_engine(engine_full)
+                return "CollapsingMergeTree(sign_column='sign')  # TODO: extract from engine_full"
             else:
                 return "MergeTree()"
         elif engine == "Log":
@@ -612,6 +727,49 @@ class ModelGenerator:
         
         return "ReplacingMergeTree()"
     
+    def _map_collapsing_engine(self, engine_full: str) -> str:
+        """Parse CollapsingMergeTree engine_full and generate CHORM CollapsingMergeTree() call.
+        
+        Syntax: CollapsingMergeTree(sign_column)
+        
+        Examples:
+            "CollapsingMergeTree(sign)" -> CollapsingMergeTree(sign_column="sign")
+        """
+        if not engine_full:
+            return "CollapsingMergeTree(sign_column='sign')"
+        
+        # Extract content inside parentheses
+        match = re.search(r'CollapsingMergeTree\(([^)]*)\)', engine_full)
+        if match:
+            inner = match.group(1).strip().strip("'\"")
+            if inner:
+                return f'CollapsingMergeTree(sign_column="{inner}")'
+        
+        return "CollapsingMergeTree(sign_column='sign')  # TODO: extract from engine_full"
+    
+    def _map_versioned_collapsing_engine(self, engine_full: str) -> str:
+        """Parse VersionedCollapsingMergeTree engine_full and generate CHORM call.
+        
+        Syntax: VersionedCollapsingMergeTree(sign_column, version_column)
+        
+        Examples:
+            "VersionedCollapsingMergeTree(sign, version)" -> VersionedCollapsingMergeTree(sign_column="sign", version_column="version")
+        """
+        if not engine_full:
+            return "VersionedCollapsingMergeTree(sign_column='sign', version_column='version')"
+        
+        # Extract content inside parentheses
+        match = re.search(r'VersionedCollapsingMergeTree\(([^)]*)\)', engine_full)
+        if match:
+            inner = match.group(1)
+            parts = [p.strip().strip("'\"") for p in inner.split(',')]
+            if len(parts) >= 2:
+                return f'VersionedCollapsingMergeTree(sign_column="{parts[0]}", version_column="{parts[1]}")'
+            elif len(parts) == 1 and parts[0]:
+                return f'VersionedCollapsingMergeTree(sign_column="{parts[0]}", version_column="version")'
+        
+        return "VersionedCollapsingMergeTree(sign_column='sign', version_column='version')  # TODO: extract from engine_full"
+    
     def _parse_distributed_args(self, inner: str) -> List[str]:
         """Parse arguments from Distributed engine definition.
         
@@ -699,6 +857,99 @@ class ModelGenerator:
         # Simple case: comma-separated column names
         parts = [p.strip() for p in expr.split(",")]
         return str(parts)
+    
+    def _parse_tuple_elements(self, inner: str) -> List[str]:
+        """Parse Tuple elements, handling both named and unnamed formats.
+        
+        Handles:
+            - Unnamed: "UInt64, String" -> ["UInt64", "String"]
+            - Named: "id UInt64, name String" -> ["UInt64", "String"]
+            - Nested: "Array(String), UInt32" -> ["Array(String)", "UInt32"]
+            - Complex: "a Tuple(b UInt64, c String), d Float64" -> ["Tuple(b UInt64, c String)", "Float64"]
+        """
+        elements = []
+        current = ""
+        depth = 0
+        
+        for char in inner:
+            if char == '(':
+                depth += 1
+                current += char
+            elif char == ')':
+                depth -= 1
+                current += char
+            elif char == ',' and depth == 0:
+                # End of element
+                if current.strip():
+                    elements.append(self._extract_type_from_element(current.strip()))
+                current = ""
+            else:
+                current += char
+        
+        # Don't forget the last element
+        if current.strip():
+            elements.append(self._extract_type_from_element(current.strip()))
+        
+        return elements
+    
+    def _extract_type_from_element(self, element: str) -> str:
+        """Extract type from tuple element, handling named elements.
+        
+        Examples:
+            "UInt64" -> "UInt64"
+            "id UInt64" -> "UInt64"
+            "Array(String)" -> "Array(String)"
+            "items Array(String)" -> "Array(String)"
+        """
+        element = element.strip()
+        
+        # Check if this is a named element (name followed by type)
+        # Named elements have format: name Type or name Type(args)
+        # We need to find where the type starts
+        
+        # If starts with a type name directly (uppercase or known type), return as-is
+        known_type_prefixes = (
+            'UInt', 'Int', 'Float', 'String', 'Date', 'DateTime', 'UUID',
+            'IPv', 'Bool', 'Decimal', 'Array', 'Tuple', 'Map', 'Nullable',
+            'LowCardinality', 'FixedString', 'Enum', 'AggregateFunction'
+        )
+        
+        if any(element.startswith(prefix) for prefix in known_type_prefixes):
+            return element
+        
+        # Otherwise, this is likely a named element: "name Type"
+        # Find the first space that's not inside parentheses
+        depth = 0
+        for i, char in enumerate(element):
+            if char == '(':
+                depth += 1
+            elif char == ')':
+                depth -= 1
+            elif char == ' ' and depth == 0:
+                # Found the separator between name and type
+                return element[i+1:].strip()
+        
+        # Fallback: return as-is (should not happen with valid input)
+        return element
+    
+    def _parse_enum_members(self, inner: str) -> Dict[str, int]:
+        """Parse Enum members from ClickHouse format.
+        
+        Handles:
+            "'val1' = 1, 'val2' = 2" -> {'val1': 1, 'val2': 2}
+            "'active' = 1, 'inactive' = 0" -> {'active': 1, 'inactive': 0}
+        """
+        members = {}
+        
+        # Regex pattern: 'name' = value
+        pattern = r"'([^']+)'\s*=\s*(-?\d+)"
+        
+        for match in re.finditer(pattern, inner):
+            name = match.group(1)
+            value = int(match.group(2))
+            members[name] = value
+        
+        return members
     
     def _map_function_to_func(self, func_name: str) -> str:
         """Map ClickHouse function name to func namespace expression.

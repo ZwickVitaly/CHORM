@@ -24,6 +24,45 @@ from chorm.sql.expression import Label, Identifier
 DeclarativeError = ConfigurationError
 
 
+def get_qualified_table_name(obj: Any) -> str:
+    """Get fully qualified table name from object.
+    
+    Returns database.table if __database__ is set, otherwise just table name.
+    Works with Table classes, TableMetadata instances, or strings.
+    
+    Examples:
+        get_qualified_table_name(User)  # Returns "users" or "mydb.users"
+        get_qualified_table_name(User.__table__)  # Same
+        get_qualified_table_name("users")  # Returns "users" as-is
+    """
+    # If it's a string, return as-is
+    if isinstance(obj, str):
+        return obj
+    
+    # If it has __table__ with qualified_name (Table class)
+    if hasattr(obj, "__table__") and hasattr(obj.__table__, "qualified_name"):
+        return obj.__table__.qualified_name
+    
+    # If it's TableMetadata with qualified_name
+    if hasattr(obj, "qualified_name"):
+        return obj.qualified_name
+    
+    # If it has __database__ and __tablename__ (Table class)
+    if hasattr(obj, "__database__") and hasattr(obj, "__tablename__"):
+        database = obj.__database__
+        tablename = obj.__tablename__
+        if database:
+            return f"{database}.{tablename}"
+        return tablename or str(obj)
+    
+    # If it only has __tablename__
+    if hasattr(obj, "__tablename__"):
+        return obj.__tablename__ or str(obj)
+    
+    # Fallback
+    return str(obj)
+
+
 class Column(Expression):
     """Descriptor representing a ClickHouse table column."""
 
@@ -103,7 +142,10 @@ class Column(Expression):
     def to_sql(self) -> str:
         if self.name is None:
             raise DeclarativeError("Column not bound to class")
-        if hasattr(self, "table") and hasattr(self.table, "__tablename__") and self.table.__tablename__:
+        if hasattr(self, "table") and hasattr(self.table, "__table__"):
+            # Use qualified_name (database.table or just table)
+            return f"{self.table.__table__.qualified_name}.{self.name}"
+        elif hasattr(self, "table") and hasattr(self.table, "__tablename__") and self.table.__tablename__:
             return f"{self.table.__tablename__}.{self.name}"
         return self.name
 
@@ -129,6 +171,7 @@ class TableMetadata:
     name: str
     columns: Tuple[ColumnInfo, ...]
     engine: TableEngine | None
+    database: str | None = None  # Optional database name
     order_by: Tuple[str, ...] = ()
     partition_by: Tuple[str, ...] = ()
     sample_by: Tuple[str, ...] = ()
@@ -136,6 +179,13 @@ class TableMetadata:
     select_query: Any | None = None
     from_table: str | None = None
     to_table: str | None = None
+
+    @property
+    def qualified_name(self) -> str:
+        """Return fully qualified name: database.table or just table."""
+        if self.database:
+            return f"{self.database}.{self.name}"
+        return self.name
 
     @property
     def column_map(self) -> Dict[str, ColumnInfo]:
@@ -153,6 +203,7 @@ class TableMeta(type):
         columns: Dict[str, Column] = {}
         engine: TableEngine | None = None
         tablename = namespace.get("__tablename__", name.lower())
+        database = namespace.get("__database__", None)
 
         order_by = mcls._normalize_clause(namespace.get("__order_by__"))
         partition_by = mcls._normalize_clause(namespace.get("__partition_by__"))
@@ -402,6 +453,7 @@ class TableMeta(type):
             name=tablename,
             columns=column_infos,
             engine=engine,
+            database=database,
             order_by=tuple(order_by),
             partition_by=tuple(partition_by),
             sample_by=tuple(sample_by),
@@ -444,6 +496,7 @@ class Table(metaclass=TableMeta):
     """Declarative base class for ClickHouse tables."""
 
     __tablename__: str | None = None
+    __database__: str | None = None  # Optional: if set, uses database.table format
     __table__: TableMetadata
     __abstract__ = True
     _decl_class_registry: Dict[str, Type["Table"]] = {}
@@ -521,6 +574,7 @@ __all__ = [
     "Column",
     "ColumnInfo",
     "DeclarativeError",
+    "get_qualified_table_name",
     "Table",
     "TableMeta",
     "TableMetadata",

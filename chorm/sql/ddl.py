@@ -7,6 +7,108 @@ from typing import Any, Dict, List, Optional, Union
 from chorm.sql.expression import Expression, _coerce
 
 
+def _get_qualified_name(obj: Any) -> str:
+    """Get fully qualified table name from object.
+    
+    Returns database.table if configured, otherwise just table name.
+    """
+    if hasattr(obj, "__table__") and hasattr(obj.__table__, "qualified_name"):
+        return obj.__table__.qualified_name
+    if hasattr(obj, "__tablename__"):
+        return obj.__tablename__
+    return str(obj)
+
+
+class CreateDatabase(Expression):
+    """Represents a CREATE DATABASE statement.
+    
+    Example:
+        stmt = create_database("radar", if_not_exists=True)
+        session.execute(stmt.to_sql())
+        # CREATE DATABASE IF NOT EXISTS radar
+    """
+
+    def __init__(
+        self,
+        name: str,
+        if_not_exists: bool = False,
+        engine: Optional[str] = None,
+        comment: Optional[str] = None,
+    ) -> None:
+        self.name = name
+        self.if_not_exists = if_not_exists
+        self.engine = engine  # e.g., "Atomic", "Replicated", "Lazy"
+        self.comment = comment
+        self._settings: Dict[str, Any] = {}
+
+    def settings(self, **kwargs: Any) -> "CreateDatabase":
+        """Add SETTINGS clause."""
+        self._settings.update(kwargs)
+        return self
+
+    def to_sql(self) -> str:
+        """Render the CREATE DATABASE statement to SQL."""
+        sql = "CREATE DATABASE"
+        if self.if_not_exists:
+            sql += " IF NOT EXISTS"
+        sql += f" {self.name}"
+
+        if self.engine:
+            sql += f" ENGINE = {self.engine}"
+
+        if self.comment:
+            sql += f" COMMENT '{self.comment}'"
+
+        if self._settings:
+            settings_list = []
+            for k, v in self._settings.items():
+                val_str = str(v)
+                if isinstance(v, str):
+                    val_str = f"'{v}'"
+                settings_list.append(f"{k}={val_str}")
+            sql += f" SETTINGS {', '.join(settings_list)}"
+
+        return sql
+
+
+class DropDatabase(Expression):
+    """Represents a DROP DATABASE statement.
+    
+    Example:
+        stmt = drop_database("radar", if_exists=True)
+        session.execute(stmt.to_sql())
+        # DROP DATABASE IF EXISTS radar
+    """
+
+    def __init__(self, name: str, if_exists: bool = True) -> None:
+        self.name = name
+        self.if_exists = if_exists
+        self._settings: Dict[str, Any] = {}
+
+    def settings(self, **kwargs: Any) -> "DropDatabase":
+        """Add SETTINGS clause."""
+        self._settings.update(kwargs)
+        return self
+
+    def to_sql(self) -> str:
+        """Render the DROP DATABASE statement to SQL."""
+        sql = "DROP DATABASE"
+        if self.if_exists:
+            sql += " IF EXISTS"
+        sql += f" {self.name}"
+
+        if self._settings:
+            settings_list = []
+            for k, v in self._settings.items():
+                val_str = str(v)
+                if isinstance(v, str):
+                    val_str = f"'{v}'"
+                settings_list.append(f"{k}={val_str}")
+            sql += f" SETTINGS {', '.join(settings_list)}"
+
+        return sql
+
+
 class DropTable(Expression):
     """Represents a DROP TABLE statement."""
 
@@ -22,7 +124,7 @@ class DropTable(Expression):
 
     def to_sql(self) -> str:
         """Render the DROP TABLE statement to SQL."""
-        table_name = self.table.__tablename__ if hasattr(self.table, "__tablename__") else str(self.table)
+        table_name = _get_qualified_name(self.table)
 
         sql = "DROP TABLE"
         if self.if_exists:
@@ -56,7 +158,7 @@ class TruncateTable(Expression):
 
     def to_sql(self) -> str:
         """Render the TRUNCATE TABLE statement to SQL."""
-        table_name = self.table.__tablename__ if hasattr(self.table, "__tablename__") else str(self.table)
+        table_name = _get_qualified_name(self.table)
 
         sql = "TRUNCATE TABLE"
         if self.if_exists:
@@ -84,7 +186,7 @@ class RenameTable(Expression):
 
     def to_sql(self) -> str:
         """Render the RENAME TABLE statement to SQL."""
-        old_table_name = self.old_name.__tablename__ if hasattr(self.old_name, "__tablename__") else str(self.old_name)
+        old_table_name = _get_qualified_name(self.old_name)
 
         return f"RENAME TABLE {old_table_name} TO {self.new_name}"
 
@@ -114,7 +216,7 @@ class AlterTableAddColumn(Expression):
 
     def to_sql(self) -> str:
         """Render the ALTER TABLE ADD COLUMN statement to SQL."""
-        table_name = self.table.__tablename__ if hasattr(self.table, "__tablename__") else str(self.table)
+        table_name = _get_qualified_name(self.table)
 
 
         # Get column definition
@@ -177,7 +279,7 @@ class AlterTableDropColumn(Expression):
 
     def to_sql(self) -> str:
         """Render the ALTER TABLE DROP COLUMN statement to SQL."""
-        table_name = self.table.__tablename__ if hasattr(self.table, "__tablename__") else str(self.table)
+        table_name = _get_qualified_name(self.table)
 
         sql = f"ALTER TABLE {table_name} DROP COLUMN"
         if self.if_exists:
@@ -212,7 +314,7 @@ class AlterTableModifyColumn(Expression):
 
     def to_sql(self) -> str:
         """Render the ALTER TABLE MODIFY COLUMN statement to SQL."""
-        table_name = self.table.__tablename__ if hasattr(self.table, "__tablename__") else str(self.table)
+        table_name = _get_qualified_name(self.table)
 
 
 
@@ -270,7 +372,7 @@ class AlterTableRenameColumn(Expression):
 
     def to_sql(self) -> str:
         """Render the ALTER TABLE RENAME COLUMN statement to SQL."""
-        table_name = self.table.__tablename__ if hasattr(self.table, "__tablename__") else str(self.table)
+        table_name = _get_qualified_name(self.table)
 
         sql = f"ALTER TABLE {table_name} RENAME COLUMN"
         if self.if_exists:
@@ -316,7 +418,7 @@ class AlterTableAddIndex(Expression):
 
     def to_sql(self) -> str:
         """Render the ALTER TABLE ADD INDEX statement to SQL."""
-        table_name = self.table.__tablename__ if hasattr(self.table, "__tablename__") else str(self.table)
+        table_name = _get_qualified_name(self.table)
 
         # Coerce expression
         expr = _coerce(self.expression)
@@ -355,7 +457,7 @@ class AlterTableDropIndex(Expression):
 
     def to_sql(self) -> str:
         """Render the ALTER TABLE DROP INDEX statement to SQL."""
-        table_name = self.table.__tablename__ if hasattr(self.table, "__tablename__") else str(self.table)
+        table_name = _get_qualified_name(self.table)
 
         sql = f"ALTER TABLE {table_name} DROP INDEX"
         if self.if_exists:
@@ -375,6 +477,50 @@ class AlterTableDropIndex(Expression):
 
 
 # Helper functions
+def create_database(
+    name: str,
+    if_not_exists: bool = False,
+    engine: Optional[str] = None,
+    comment: Optional[str] = None,
+    **settings: Any,
+) -> CreateDatabase:
+    """Create a CREATE DATABASE statement.
+    
+    Args:
+        name: Database name
+        if_not_exists: Add IF NOT EXISTS clause
+        engine: Database engine (Atomic, Replicated, Lazy, etc.)
+        comment: Optional comment
+        **settings: Additional SETTINGS
+        
+    Example:
+        stmt = create_database("radar", if_not_exists=True)
+        session.execute(stmt.to_sql())
+    """
+    stmt = CreateDatabase(name, if_not_exists=if_not_exists, engine=engine, comment=comment)
+    if settings:
+        stmt.settings(**settings)
+    return stmt
+
+
+def drop_database(name: str, if_exists: bool = True, **settings: Any) -> DropDatabase:
+    """Create a DROP DATABASE statement.
+    
+    Args:
+        name: Database name
+        if_exists: Add IF EXISTS clause (default True for safety)
+        **settings: Additional SETTINGS
+        
+    Example:
+        stmt = drop_database("radar")
+        session.execute(stmt.to_sql())
+    """
+    stmt = DropDatabase(name, if_exists=if_exists)
+    if settings:
+        stmt.settings(**settings)
+    return stmt
+
+
 def drop_table(table: Any, if_exists: bool = True, **settings: Any) -> DropTable:
     """Create a DROP TABLE statement."""
     stmt = DropTable(table, if_exists=if_exists)
@@ -509,7 +655,7 @@ class AlterTableModifyTTL(Expression):
 
     def to_sql(self) -> str:
         """Render the ALTER TABLE MODIFY TTL statement to SQL."""
-        table_name = self.table.__tablename__ if hasattr(self.table, "__tablename__") else str(self.table)
+        table_name = _get_qualified_name(self.table)
 
         sql = f"ALTER TABLE {table_name} MODIFY TTL {self.ttl_expression}"
 
@@ -548,7 +694,7 @@ class DetachPartition(Expression):
 
     def to_sql(self) -> str:
         """Render the DETACH PARTITION statement to SQL."""
-        table_name = self.table.__tablename__ if hasattr(self.table, "__tablename__") else str(self.table)
+        table_name = _get_qualified_name(self.table)
 
         part_val = f"'{self.partition_id}'" if isinstance(self.partition_id, str) else str(self.partition_id)
         sql = f"ALTER TABLE {table_name} DETACH PARTITION {part_val}"
@@ -580,7 +726,7 @@ class AttachPartition(Expression):
 
     def to_sql(self) -> str:
         """Render the ATTACH PARTITION statement to SQL."""
-        table_name = self.table.__tablename__ if hasattr(self.table, "__tablename__") else str(self.table)
+        table_name = _get_qualified_name(self.table)
 
         part_val = f"'{self.partition_id}'" if isinstance(self.partition_id, str) else str(self.partition_id)
         sql = f"ALTER TABLE {table_name} ATTACH PARTITION {part_val}"
@@ -612,7 +758,7 @@ class DropPartition(Expression):
 
     def to_sql(self) -> str:
         """Render the DROP PARTITION statement to SQL."""
-        table_name = self.table.__tablename__ if hasattr(self.table, "__tablename__") else str(self.table)
+        table_name = _get_qualified_name(self.table)
 
         part_val = f"'{self.partition_id}'" if isinstance(self.partition_id, str) else str(self.partition_id)
         sql = f"ALTER TABLE {table_name} DROP PARTITION {part_val}"
@@ -645,7 +791,7 @@ class FetchPartition(Expression):
 
     def to_sql(self) -> str:
         """Render the FETCH PARTITION statement to SQL."""
-        table_name = self.table.__tablename__ if hasattr(self.table, "__tablename__") else str(self.table)
+        table_name = _get_qualified_name(self.table)
 
         part_val = f"'{self.partition_id}'" if isinstance(self.partition_id, str) else str(self.partition_id)
         sql = f"ALTER TABLE {table_name} FETCH PARTITION {part_val} FROM '{self.from_path}'"
@@ -728,7 +874,7 @@ class CreateMaterializedView(Expression):
         sql += f" {self.name}"
 
         if self.to_table:
-            to_name = self.to_table.__tablename__ if hasattr(self.to_table, "__tablename__") else str(self.to_table)
+            to_name = _get_qualified_name(self.to_table)
             sql += f" TO {to_name}"
         elif self.engine:
             # Render engine clause
@@ -800,7 +946,7 @@ class OptimizeTable(Expression):
 
     def to_sql(self) -> str:
         """Render the OPTIMIZE TABLE statement to SQL."""
-        table_name = self.table.__tablename__ if hasattr(self.table, "__tablename__") else str(self.table)
+        table_name = _get_qualified_name(self.table)
 
         sql = f"OPTIMIZE TABLE {table_name}"
 
@@ -929,6 +1075,170 @@ def create_dictionary(
 ) -> CreateDictionary:
     """Create a CREATE DICTIONARY statement."""
     stmt = CreateDictionary(name, source, layout, structure, lifetime=lifetime, if_not_exists=if_not_exists)
+    if settings:
+        stmt.settings(**settings)
+    return stmt
+
+
+class CreateTableAsSelect(Expression):
+    """Represents a CREATE TABLE ... AS SELECT statement.
+    
+    This is useful for creating tables with the same structure as a query result,
+    optionally populating them with the query data.
+    
+    Examples:
+        # Create empty table with structure from SELECT
+        create_table_as_select("new_table", select(User.id, User.name).where(User.active == 1))
+        
+        # Create table with specific engine
+        create_table_as_select("events_backup", select(Events), engine=MergeTree())
+        
+        # Create with all options
+        create_table_as_select(
+            "aggregated_stats",
+            select(User.id, func.count()).group_by(User.id),
+            engine=SummingMergeTree(),
+            order_by=["id"],
+            if_not_exists=True
+        )
+    """
+
+    def __init__(
+        self,
+        name: str,
+        query: Any,
+        engine: Optional[Any] = None,
+        order_by: Optional[List[str]] = None,
+        partition_by: Optional[str] = None,
+        primary_key: Optional[List[str]] = None,
+        if_not_exists: bool = False,
+    ) -> None:
+        """Initialize CREATE TABLE AS SELECT statement.
+        
+        Args:
+            name: Name of the table to create
+            query: SELECT statement (Select object or raw SQL string)
+            engine: Table engine (e.g., MergeTree(), SummingMergeTree())
+            order_by: ORDER BY columns for the table (not the query)
+            partition_by: PARTITION BY expression
+            primary_key: PRIMARY KEY columns (defaults to order_by if not specified)
+            if_not_exists: Add IF NOT EXISTS clause
+        """
+        self.name = name
+        self.query = query
+        self.engine = engine
+        self.order_by = order_by
+        self.partition_by = partition_by
+        self.primary_key = primary_key
+        self.if_not_exists = if_not_exists
+        self._settings: Dict[str, Any] = {}
+
+    def settings(self, **kwargs: Any) -> "CreateTableAsSelect":
+        """Add SETTINGS clause."""
+        self._settings.update(kwargs)
+        return self
+
+    def to_sql(self) -> str:
+        """Render the CREATE TABLE AS SELECT statement to SQL."""
+        sql = "CREATE TABLE"
+        if self.if_not_exists:
+            sql += " IF NOT EXISTS"
+
+        sql += f" {self.name}"
+
+        # Engine
+        if self.engine:
+            engine_sql = self.engine.format_clause() if hasattr(self.engine, "format_clause") else str(self.engine)
+            sql += f" ENGINE = {engine_sql}"
+
+        # ORDER BY
+        if self.order_by:
+            if len(self.order_by) == 1:
+                sql += f" ORDER BY {self.order_by[0]}"
+            else:
+                sql += f" ORDER BY ({', '.join(self.order_by)})"
+
+        # PARTITION BY
+        if self.partition_by:
+            sql += f" PARTITION BY {self.partition_by}"
+
+        # PRIMARY KEY (if different from ORDER BY)
+        if self.primary_key:
+            if len(self.primary_key) == 1:
+                sql += f" PRIMARY KEY {self.primary_key[0]}"
+            else:
+                sql += f" PRIMARY KEY ({', '.join(self.primary_key)})"
+
+        # Settings before AS SELECT
+        if self._settings:
+            settings_list = []
+            for k, v in self._settings.items():
+                val_str = str(v)
+                if isinstance(v, str):
+                    val_str = f"'{v}'"
+                settings_list.append(f"{k}={val_str}")
+            sql += f" SETTINGS {', '.join(settings_list)}"
+
+        # Render query
+        query_sql = self.query.to_sql() if hasattr(self.query, "to_sql") else str(self.query)
+        sql += f" AS {query_sql}"
+
+        return sql
+
+
+def create_table_as_select(
+    name: str,
+    query: Any,
+    engine: Optional[Any] = None,
+    order_by: Optional[List[str]] = None,
+    partition_by: Optional[str] = None,
+    primary_key: Optional[List[str]] = None,
+    if_not_exists: bool = False,
+    **settings: Any,
+) -> CreateTableAsSelect:
+    """Create a CREATE TABLE ... AS SELECT statement.
+    
+    This is useful for creating tables with the same structure as a query result,
+    optionally populating them with the query data.
+    
+    Args:
+        name: Name of the table to create
+        query: SELECT statement (Select object or raw SQL string)
+        engine: Table engine (e.g., MergeTree(), SummingMergeTree())
+        order_by: ORDER BY columns for the table (not the query)
+        partition_by: PARTITION BY expression
+        primary_key: PRIMARY KEY columns (defaults to order_by if not specified)
+        if_not_exists: Add IF NOT EXISTS clause
+        **settings: Additional SETTINGS parameters
+        
+    Returns:
+        CreateTableAsSelect statement object
+        
+    Examples:
+        # Basic CTAS
+        stmt = create_table_as_select("backup", select(User))
+        
+        # With MergeTree engine
+        from chorm.table_engines import MergeTree
+        stmt = create_table_as_select(
+            "stats", 
+            select(User.id, func.count()).group_by(User.id),
+            engine=MergeTree(),
+            order_by=["id"]
+        )
+        
+        # Execute
+        session.execute(stmt.to_sql())
+    """
+    stmt = CreateTableAsSelect(
+        name,
+        query,
+        engine=engine,
+        order_by=order_by,
+        partition_by=partition_by,
+        primary_key=primary_key,
+        if_not_exists=if_not_exists,
+    )
     if settings:
         stmt.settings(**settings)
     return stmt

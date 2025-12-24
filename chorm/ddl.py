@@ -9,7 +9,15 @@ if TYPE_CHECKING:
 
 
 def format_identifier(identifier: str) -> str:
-    """Double-quote identifiers to avoid collisions with reserved words."""
+    """Format identifier, handling qualified names (database.table).
+    
+    For qualified names like 'radar.products', returns as-is.
+    For simple identifiers that need escaping, uses double quotes.
+    """
+    # If it contains a dot, it's a qualified name - don't quote
+    if "." in identifier:
+        return identifier
+    
     if identifier.isidentifier() and identifier.lower() == identifier:
         return identifier
     return f'"{identifier}"'
@@ -95,7 +103,7 @@ def format_ddl(metadata: TableMetadata, *, if_not_exists: bool = False) -> str:
     clause_sql = metadata.engine.format_clause()
 
     lines = [
-        f"{'CREATE TABLE IF NOT EXISTS' if if_not_exists else 'CREATE TABLE'} {format_identifier(metadata.name)} (",
+        f"{'CREATE TABLE IF NOT EXISTS' if if_not_exists else 'CREATE TABLE'} {format_identifier(metadata.qualified_name)} (",
         "  " + ",\n  ".join(column_lines),
     ]
     lines.append(")")

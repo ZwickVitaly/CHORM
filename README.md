@@ -30,6 +30,13 @@ A powerful SQLAlchemy-like ORM for ClickHouse, optimized for analytics and high-
 - **Dictionaries**: External data source integration
 - **EXPLAIN/ANALYZE**: Query profiling and optimization
 
+### Multi-Database Support
+- **Database Attribute**: Specify target database per table with `__database__`
+- **Qualified Names**: Automatic `database.table` formatting in all SQL statements
+- **Database DDL**: `CREATE DATABASE` / `DROP DATABASE` with full options
+- **Smart Drop Protection**: Automatic size limit bypass with UNDROP warnings
+- **Safe Migrations**: DROP DATABASE never auto-generated, explicit warnings for drops
+
 ## Installation
 
 ```bash
@@ -128,6 +135,47 @@ metadata.create_all(engine)
 metadata.drop_all(engine)
 ```
 
+### Multi-Database Support
+
+Work with tables across multiple databases:
+
+```python
+from chorm import Table, Column, create_engine, Session
+from chorm.types import UInt64, String
+from chorm.table_engines import MergeTree
+from chorm.sql import select, insert
+from chorm.sql.ddl import create_database, drop_database
+
+# Create engine
+engine = create_engine("clickhouse://localhost:8123/default")
+session = Session(engine)
+
+# Create a new database
+session.execute(create_database("analytics", if_not_exists=True).to_sql())
+
+# Define table in specific database
+class Event(Table):
+    __tablename__ = "events"
+    __database__ = "analytics"  # <-- Target database
+    __engine__ = MergeTree()
+    __order_by__ = ["id"]
+    
+    id = Column(UInt64(), primary_key=True)
+    name = Column(String())
+
+# Create table (generates: CREATE TABLE analytics.events ...)
+session.execute(Event.create_table())
+
+# Insert (generates: INSERT INTO analytics.events ...)
+session.execute(insert(Event).values(id=1, name="click").to_sql())
+
+# Select (generates: SELECT analytics.events.id FROM analytics.events ...)
+result = session.execute(select(Event.id, Event.name).to_sql())
+print(result.all())
+
+# Cleanup
+session.execute(drop_database("analytics", if_exists=True).to_sql())
+```
 
 ## CLI & Migrations
 

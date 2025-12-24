@@ -133,8 +133,11 @@ class Select(Expression):
 
     def select_from(self, from_obj: Any) -> Select:
         """Explicitly set the FROM clause."""
-        if hasattr(from_obj, "__tablename__"):
-            # Handle declarative Table classes
+        if hasattr(from_obj, "__table__") and hasattr(from_obj.__table__, "qualified_name"):
+            # Handle declarative Table classes with optional database
+            self._from = Identifier(from_obj.__table__.qualified_name)
+        elif hasattr(from_obj, "__tablename__"):
+            # Fallback for older code without __table__
             self._from = Identifier(from_obj.__tablename__)
         elif isinstance(from_obj, str):
             self._from = Identifier(from_obj)
@@ -159,7 +162,9 @@ class Select(Expression):
             raise ValueError("CROSS JOIN does not accept 'on' or 'using' parameters")
 
         # Convert target to Expression
-        if hasattr(target, "__tablename__"):
+        if hasattr(target, "__table__") and hasattr(target.__table__, "qualified_name"):
+            target_expr = Identifier(target.__table__.qualified_name)
+        elif hasattr(target, "__tablename__"):
             target_expr = Identifier(target.__tablename__)
         elif isinstance(target, str):
             target_expr = Identifier(target)

@@ -12,7 +12,14 @@ from chorm.sql.selectable import Select
 
 
 class AsyncSession:
-    """Manages asynchronous persistence operations for ORM objects."""
+    """Manages asynchronous persistence operations for ORM objects.
+    
+    Note: This is NOT a transactional session. ClickHouse is an OLAP database
+    and does not support traditional ACID transactions for most operations.
+    
+    - `commit()` flushes pending inserts to the database (no rollback possible)
+    - `clear()` discards pending inserts from memory (does not affect database)
+    """
 
     def __init__(self, bind: AsyncEngine) -> None:
         self.bind = bind
@@ -58,9 +65,12 @@ class AsyncSession:
         self._pending_inserts[model_cls].append(instance)
 
     async def commit(self) -> None:
-        """Flush pending changes (inserts) to the database asynchronously.
+        """Flush pending inserts to the database asynchronously.
 
-        Validates all pending instances before committing.
+        Note: This is not a database transaction. Once data is inserted,
+        it cannot be rolled back. Use `clear()` before `commit()` to discard.
+
+        Validates all pending instances before inserting.
 
         Raises:
             ValidationError: If any instance validation fails
@@ -100,9 +110,21 @@ class AsyncSession:
 
         self._pending_inserts.clear()
 
-    def rollback(self) -> None:
-        """Clear pending operations."""
+    def clear(self) -> None:
+        """Clear pending inserts from memory.
+        
+        This does NOT rollback any database changes - ClickHouse inserts
+        are immediate and cannot be rolled back. This only discards
+        objects added via `add()` that haven't been committed yet.
+        """
         self._pending_inserts.clear()
+
+    def rollback(self) -> None:
+        """Alias for `clear()`. Kept for SQLAlchemy compatibility.
+        
+        Note: This does NOT rollback database changes.
+        """
+        self.clear()
 
     async def close(self) -> None:
         """Close the session."""

@@ -18,6 +18,18 @@ def _escape_string(value: str) -> str:
     return escape_string(value)
 
 
+def _get_qualified_name(obj: Any) -> str:
+    """Get fully qualified table name from object.
+    
+    Returns database.table if configured, otherwise just table name.
+    """
+    if hasattr(obj, "__table__") and hasattr(obj.__table__, "qualified_name"):
+        return obj.__table__.qualified_name
+    if hasattr(obj, "__tablename__"):
+        return obj.__tablename__
+    return str(obj)
+
+
 class Insert(Expression):
     """Represents an INSERT statement."""
 
@@ -68,7 +80,7 @@ class Insert(Expression):
         Note: This is mostly for debugging or small inserts.
         ClickHouse client prefers separate data transmission.
         """
-        table_name = self.table.__tablename__ if hasattr(self.table, "__tablename__") else str(self.table)
+        table_name = _get_qualified_name(self.table)
 
         # INSERT FROM SELECT
         if self._select_query is not None:
@@ -160,7 +172,7 @@ class Update(Expression):
 
     def to_sql(self) -> str:
         """Render the UPDATE statement to SQL."""
-        table_name = self.table.__tablename__ if hasattr(self.table, "__tablename__") else str(self.table)
+        table_name = _get_qualified_name(self.table)
 
         assignments = []
         for k, v in self._values.items():
@@ -226,7 +238,7 @@ class Delete(Expression):
 
     def to_sql(self) -> str:
         """Render the DELETE statement to SQL."""
-        table_name = self.table.__tablename__ if hasattr(self.table, "__tablename__") else str(self.table)
+        table_name = _get_qualified_name(self.table)
 
         sql = f"ALTER TABLE {table_name} DELETE"
 
