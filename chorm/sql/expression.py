@@ -3,14 +3,19 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date, datetime
 from typing import Any, Tuple, Union, Optional, List
 
 
 class Expression:
     """Base class for all SQL expressions."""
 
-    def to_sql(self) -> str:
-        """Render the expression as a SQL string."""
+    def to_sql(self, compiler: Any = None) -> str:
+        """Render the expression as a SQL string.
+        
+        Args:
+            compiler: Optional Compiler instance to collect parameters.
+        """
         raise NotImplementedError
 
     def __str__(self) -> str:
@@ -99,8 +104,8 @@ class BinaryExpression(Expression):
     operator: str
     right: Expression
 
-    def to_sql(self) -> str:
-        return f"({self.left.to_sql()} {self.operator} {self.right.to_sql()})"
+    def to_sql(self, compiler: Any = None) -> str:
+        return f"({self.left.to_sql(compiler)} {self.operator} {self.right.to_sql(compiler)})"
 
 
 @dataclass(frozen=True)
@@ -108,15 +113,15 @@ class UnaryExpression(Expression):
     operator: str
     operand: Expression
 
-    def to_sql(self) -> str:
-        return f"{self.operator} ({self.operand.to_sql()})"
+    def to_sql(self, compiler: Any = None) -> str:
+        return f"{self.operator} ({self.operand.to_sql(compiler)})"
 
 
 @dataclass(frozen=True, eq=False)
 class Identifier(Expression):
     name: str
 
-    def to_sql(self) -> str:
+    def to_sql(self, compiler: Any = None) -> str:
         return self.name
 
 
@@ -126,13 +131,18 @@ from chorm.utils import escape_string
 class Literal(Expression):
     value: Any
 
-    def to_sql(self) -> str:
+    def to_sql(self, compiler: Any = None) -> str:
+        if compiler is not None:
+            return compiler.add_param(self.value)
+            
         if isinstance(self.value, str):
             return f"'{escape_string(self.value)}'"
         if self.value is None:
             return "NULL"
         if isinstance(self.value, bool):
             return "1" if self.value else "0"
+        if isinstance(self.value, (date, datetime)):
+            return f"'{self.value}'"
         return str(self.value)
 
 
@@ -140,7 +150,7 @@ class Literal(Expression):
 class Raw(Expression):
     sql: str
 
-    def to_sql(self) -> str:
+    def to_sql(self, compiler: Any = None) -> str:
         return self.sql
 
 
@@ -158,8 +168,8 @@ class FunctionCall(Expression):
     name: str
     args: Tuple[Expression, ...]
 
-    def to_sql(self) -> str:
-        rendered = ", ".join(arg.to_sql() for arg in self.args)
+    def to_sql(self, compiler: Any = None) -> str:
+        rendered = ", ".join(arg.to_sql(compiler) for arg in self.args)
         return f"{self.name}({rendered})"
 
     def __call__(self, *args: Any) -> "FunctionCall":
@@ -216,9 +226,9 @@ class ParameterizedFunctionCall(Expression):
     params: Tuple[Expression, ...]
     args: Tuple[Expression, ...]
 
-    def to_sql(self) -> str:
-        params_rendered = ", ".join(param.to_sql() for param in self.params)
-        args_rendered = ", ".join(arg.to_sql() for arg in self.args)
+    def to_sql(self, compiler: Any = None) -> str:
+        params_rendered = ", ".join(param.to_sql(compiler) for param in self.params)
+        args_rendered = ", ".join(arg.to_sql(compiler) for arg in self.args)
         return f"{self.name}({params_rendered})({args_rendered})"
 
     def over(
@@ -263,12 +273,12 @@ class Window(Expression):
     order_by: List[Expression]
     frame: Optional[str] = None
 
-    def to_sql(self) -> str:
+    def to_sql(self, compiler: Any = None) -> str:
         parts = []
         if self.partition_by:
-            parts.append(f"PARTITION BY {', '.join(p.to_sql() for p in self.partition_by)}")
+            parts.append(f"PARTITION BY {', '.join(p.to_sql(compiler) for p in self.partition_by)}")
         if self.order_by:
-            parts.append(f"ORDER BY {', '.join(o.to_sql() for o in self.order_by)}")
+            parts.append(f"ORDER BY {', '.join(o.to_sql(compiler) for o in self.order_by)}")
         if self.frame:
             parts.append(self.frame)
 
@@ -282,8 +292,8 @@ class WindowFunction(Expression):
     function: FunctionCall
     window: Window
 
-    def to_sql(self) -> str:
-        return f"{self.function.to_sql()} {self.window.to_sql()}"
+    def to_sql(self, compiler: Any = None) -> str:
+        return f"{self.function.to_sql(compiler)} {self.window.to_sql(compiler)}"
 
 
 @dataclass(frozen=True)
@@ -291,8 +301,8 @@ class Label(Expression):
     name: str
     expression: Expression
 
-    def to_sql(self) -> str:
-        return f"{self.expression.to_sql()} AS {self.name}"
+    def to_sql(self, compiler: Any = None) -> str:
+        return f"{self.expression.to_sql(compiler)} AS {self.name}"
 
 
 @dataclass(frozen=True)
@@ -302,8 +312,8 @@ class OrderByClause(Expression):
     expression: Expression
     direction: str  # "ASC" or "DESC"
 
-    def to_sql(self) -> str:
-        return f"{self.expression.to_sql()} {self.direction}"
+    def to_sql(self, compiler: Any = None) -> str:
+        return f"{self.expression.to_sql(compiler)} {self.direction}"
 
 
 @dataclass(frozen=True)
@@ -326,8 +336,8 @@ class Subquery(Expression):
         """
         return ColumnNamespace(self.alias or "subquery", self.select)
 
-    def to_sql(self) -> str:
-        sql = f"({self.select.to_sql()})"
+    def to_sql(self, compiler: Any = None) -> str:
+        sql = f"({self.select.to_sql(compiler)})"
         if self.alias:
             sql += f" AS {self.alias}"
         return sql
@@ -339,8 +349,8 @@ class ScalarSubquery(Expression):
 
     select: Expression
 
-    def to_sql(self) -> str:
-        return f"({self.select.to_sql()})"
+    def to_sql(self, compiler: Any = None) -> str:
+        return f"({self.select.to_sql(compiler)})"
 
 
 @dataclass(frozen=True)
@@ -363,9 +373,9 @@ class CTE(Expression):
         """
         return ColumnNamespace(self.name, self.select)
 
-    def to_sql(self) -> str:
+    def to_sql(self, compiler: Any = None) -> str:
         """Render CTE as 'name AS (SELECT ...)'."""
-        return f"{self.name} AS ({self.select.to_sql()})"
+        return f"{self.name} AS ({self.select.to_sql(compiler)})"
 
 
 class ColumnNamespace:

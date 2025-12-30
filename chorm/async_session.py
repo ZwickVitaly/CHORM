@@ -21,21 +21,22 @@ class AsyncSession:
     - `clear()` discards pending inserts from memory (does not affect database)
     """
 
-    def __init__(self, bind: AsyncEngine) -> None:
+    def __init__(self, bind: AsyncEngine, **kwargs: Any) -> None:
         self.bind = bind
+        self._connect_overrides = kwargs
         self._pending_inserts: Dict[Type[Table], List[Table]] = {}
 
     async def execute(self, statement: Any) -> Result:
         """Execute a SQL statement asynchronously."""
         if isinstance(statement, Select):
-            sql = statement.to_sql()
+            sql, compiled_params = self.bind.compile(statement)
             # TODO: Infer model from Select statement for automatic mapping
-            raw_result = await self.bind.query(sql)
+            raw_result = await self.bind.query(sql, parameters=compiled_params, **self._connect_overrides)
             return Result(raw_result)
 
         elif isinstance(statement, (Insert, Update, Delete)):
-            sql = statement.to_sql()
-            await self.bind.execute(sql)
+            sql, compiled_params = self.bind.compile(statement)
+            await self.bind.execute(sql, parameters=compiled_params, **self._connect_overrides)
             return Result(None)
 
         else:
@@ -43,9 +44,9 @@ class AsyncSession:
             # Check if it's a query or command
             sql = str(statement).strip()
             if sql.upper().startswith("SELECT") or sql.upper().startswith("WITH"):
-                return Result(await self.bind.query(sql))
+                return Result(await self.bind.query(sql, **self._connect_overrides))
             else:
-                await self.bind.execute(sql)
+                await self.bind.execute(sql, **self._connect_overrides)
                 return Result(None)
 
     def add(self, instance: Table) -> None:
@@ -105,8 +106,8 @@ class AsyncSession:
                     row.append(val)
                 data_tuples.append(row)
 
-            async with self.bind.connect() as conn:
-                await conn.insert(table_name, data_tuples, column_names=column_names)
+            async with self.bind.connect(**self._connect_overrides) as conn:
+                await conn.insert(table_name, data_tuples, column_names=column_names, **self._connect_overrides)
 
         self._pending_inserts.clear()
 
@@ -141,11 +142,16 @@ class AsyncSession:
             pandas.DataFrame
         """
         if isinstance(statement, Select):
-            sql = statement.to_sql()
+            sql, compiled_params = self.bind.compile(statement)
+            final_params = compiled_params
+            if parameters:
+                final_params = compiled_params.copy()
+                final_params.update(parameters)
         else:
             sql = str(statement)
+            final_params = parameters
             
-        return await self.bind.query_df(sql, parameters=parameters)
+        return await self.bind.query_df(sql, parameters=final_params, **self._connect_overrides)
 
     async def __aenter__(self) -> AsyncSession:
         """Async context manager entry."""

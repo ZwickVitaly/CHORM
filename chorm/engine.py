@@ -249,6 +249,33 @@ class Engine:
         """Return the connection pool if pooling is enabled."""
         return self._pool
 
+    def compile(self, statement: Any) -> Tuple[str, Dict[str, Any]]:
+        """Compile a statement into SQL and parameters.
+        
+        Args:
+            statement: SQL statement (string or selectable object)
+            
+        Returns:
+            Tuple of (sql, parameters)
+        """
+        from chorm.sql.compiler import Compiler
+        
+        if hasattr(statement, "to_sql"):
+            compiler = Compiler()
+            # If statement has to_sql, use compiler
+            # We need to handle potential legacy to_sql signatures if any user defined them?
+            # But we are updating internal ones.
+            # Python is dynamic, so we can try calling with argument.
+            if hasattr(statement.to_sql, "__code__") and statement.to_sql.__code__.co_argcount > 1:
+                 sql = statement.to_sql(compiler)
+            else:
+                 # Legacy support or simple string return
+                 sql = statement.to_sql()
+            
+            return sql, compiler.params
+            
+        return str(statement), {}
+
     def connect(self, *, settings: Mapping[str, Any] | None = None, **overrides: Any) -> "Connection":
         """Get a connection from pool or create a new one.
 
@@ -442,6 +469,23 @@ class Connection:
 def create_engine(
     url: str | None = None,
     *,
+    host: str | None = None,
+    port: int | None = None,
+    username: str | None = None,
+    password: str | None = None,
+    database: str | None = None,
+    secure: bool | None = None,
+    connect_timeout: int | None = None,
+    send_receive_timeout: int | None = None,
+    compress: bool | str | None = None,
+    query_limit: int | None = None,
+    verify: bool | None = None,
+    ca_cert: str | None = None,
+    client_cert: str | None = None,
+    client_cert_key: str | None = None,
+    http_proxy: str | None = None,
+    https_proxy: str | None = None,
+    client_name: str | None = None,
     connect_args: Mapping[str, Any] | None = None,
     pool_size: int | None = None,
     max_overflow: int | None = None,
@@ -454,26 +498,41 @@ def create_engine(
 
     Args:
         url: Optional connection URL
+        host: ClickHouse server hostname (default: localhost)
+        port: ClickHouse HTTP/HTTPS port (default: 8123)
+        username: ClickHouse username (default: default)
+        password: Password for authentication
+        database: Default database (default: default)
+        secure: Use HTTPS/TLS (default: False)
+        connect_timeout: HTTP connection timeout in seconds (default: 10)
+        send_receive_timeout: HTTP read timeout in seconds (default: 300)
+        compress: Enable compression - True, False, or 'lz4'/'zstd'/'brotli'/'gzip' (default: False)
+        query_limit: Default LIMIT on returned rows, 0 = no limit (default: 0)
+        verify: Verify server certificate in HTTPS mode (default: True)
+        ca_cert: Path to CA certificate in .pem format, or 'certifi'
+        client_cert: Path to client certificate in .pem format
+        client_cert_key: Path to private key for client certificate
+        http_proxy: HTTP proxy address
+        https_proxy: HTTPS proxy address
+        client_name: Client name for query tracking
         connect_args: Additional connection arguments
         pool_size: Enable pooling with this pool size (default: disabled)
         max_overflow: Maximum overflow connections (default: 10)
         pool_timeout: Connection acquisition timeout in seconds (default: 30.0)
         pool_recycle: Connection recycle time in seconds (default: 3600)
         pool_pre_ping: Enable active connection validation (default: False)
-        **kwargs: Engine configuration and connection parameters
+        **kwargs: Additional engine configuration and connection parameters
 
     Returns:
         Engine instance with optional connection pooling
 
     Example:
-        >>> # Without pooling
-        >>> engine = create_engine("clickhouse://localhost:8123/default")
-        >>>
-        >>> # With pooling
+        >>> # Explicit configuration
         >>> engine = create_engine(
-        ...     "clickhouse://localhost:8123/default",
-        ...     pool_size=10,
-        ...     max_overflow=20
+        ...     host="localhost",
+        ...     username="default",
+        ...     password="password",
+        ...     send_receive_timeout=60
         ... )
     """
     config = EngineConfig()
@@ -482,26 +541,54 @@ def create_engine(
     if url is not None:
         config, url_connect_args = EngineConfig.from_url(url)
 
-    config_kwargs: Dict[str, Any] = {}
-    extra_connect_args: Dict[str, Any] = {}
+    # Collect explicit overrides
+    overrides: Dict[str, Any] = {}
+    if host is not None: overrides["host"] = host
+    if port is not None: overrides["port"] = port
+    if username is not None: overrides["username"] = username
+    if password is not None: overrides["password"] = password
+    if database is not None: overrides["database"] = database
+    if secure is not None: overrides["secure"] = secure
+    if connect_timeout is not None: overrides["connect_timeout"] = connect_timeout
+    if send_receive_timeout is not None: overrides["send_receive_timeout"] = send_receive_timeout
+    if compress is not None: overrides["compress"] = compress
+    if query_limit is not None: overrides["query_limit"] = query_limit
+    if verify is not None: overrides["verify"] = verify
+    if ca_cert is not None: overrides["ca_cert"] = ca_cert
+    if client_cert is not None: overrides["client_cert"] = client_cert
+    if client_cert_key is not None: overrides["client_cert_key"] = client_cert_key
+    if http_proxy is not None: overrides["http_proxy"] = http_proxy
+    if https_proxy is not None: overrides["https_proxy"] = https_proxy
+    if client_name is not None: overrides["client_name"] = client_name
 
+    # Add kwargs to overrides if they match config keys
+    extra_connect_args: Dict[str, Any] = {}
     for key, value in kwargs.items():
         if key in _CONFIG_KEYS:
-            config_kwargs[key] = value
+            overrides[key] = value
         else:
             extra_connect_args[key] = value
 
-    if config_kwargs:
-        config = config.with_overrides(**config_kwargs)
+    if overrides:
+        config = config.with_overrides(**overrides)
 
     # Set default password from environment if password is empty
     if not config.password:
         env_password = os.environ.get("CLICKHOUSE_PASSWORD")
         if env_password is not None:
             config = config.with_overrides(password=env_password)
-        else:
-            # Default to "123" for tests
-            config = config.with_overrides(password="123")
+        elif not config.password and not overrides.get("password"):
+            # Default to "123" only if not explicitly set to empty string and no env var
+             # NOTE: Original logic was: if not config.password -> check env -> else "123"
+             # I'll keep it mostly same but be careful about explicit empty string.
+             # If user passed password="", config.password is ""
+             pass
+        
+    # Re-eval "123" default for backward compat if it was relying on it.
+    # The original logic applied "123" if config.password was empty after env check.
+    if not config.password:
+             config = config.with_overrides(password="123")
+
 
     merged_connect_args: Dict[str, Any] = dict(url_connect_args)
     merged_connect_args.update(extra_connect_args)

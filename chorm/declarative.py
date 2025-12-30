@@ -139,7 +139,7 @@ class Column(Expression):
         type_repr = self.field_type.ch_type if hasattr(self.field_type, "ch_type") else repr(self.field_type)
         return f"Column({self.name!r}, {type_repr})"
 
-    def to_sql(self) -> str:
+    def to_sql(self, compiler: Any = None) -> str:
         if self.name is None:
             raise DeclarativeError("Column not bound to class")
         if hasattr(self, "table") and hasattr(self.table, "__table__"):

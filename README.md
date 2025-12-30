@@ -65,13 +65,20 @@ class User(Table):
 ```python
 from chorm import create_engine, Session, select
 
-# Create engine with timeout configuration
+# Create engine with explicit configuration (recommended)
 engine = create_engine(
-    "clickhouse://localhost:8123/default",
-    connect_timeout=5,           # Connection timeout in seconds
-    send_receive_timeout=120,    # Query timeout in seconds
-    compress='lz4'               # Enable compression
+    host="localhost",
+    port=8123,
+    username="default",
+    password="password",  # No URL encoding needed!
+    database="default",
+    connect_timeout=5,
+    send_receive_timeout=120,
+    compress='lz4'
 )
+
+# Or using connection URL (backward compatibility)
+# engine = create_engine("clickhouse://default:password@localhost:8123/default")
 
 # Create session
 session = Session(engine)
@@ -87,13 +94,30 @@ result = session.execute(stmt)
 users = result.all()
 ```
 
+### Session Configuration Overrides
+
+You can override connection parameters for a specific session without changing the global engine configuration. This is useful for long-running operations.
+
+```python
+# Create a session with a longer timeout
+long_session = Session(engine, send_receive_timeout=3600)
+
+long_session.execute("OPTIMIZE TABLE big_table FINAL")
+# Uses 3600s timeout, while 'engine' defaults remain unchanged
+```
+
 ### Asynchronous Usage
 
 ```python
 from chorm import create_async_engine, AsyncSession
 
 # Create async engine
-engine = create_async_engine("clickhouse://localhost:8123/default")
+engine = create_async_engine(
+    host="localhost", 
+    port=8123, 
+    username="default", 
+    password="password"
+)
 
 # Use async session
 async with AsyncSession(engine) as session:

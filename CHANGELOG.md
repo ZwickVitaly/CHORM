@@ -5,6 +5,15 @@ All notable changes to CHORM will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.3] - 2025-12-30
+
+### Security
+- **Native SQL Parameterization**: Refactored SQL generation to use native driver parameterization. 
+    - Introduced `Compiler` class to separate query structure from data.
+    - `Expression.to_sql()` now delegates value handling to the driver via bind parameters.
+    - `Literal` values (numbers, strings, dates) are passed as parameters, preventing SQL injection and ensuring correct type formatting.
+    - Updated `Engine` and `Session` to compile statements into SQL templates and parameter dictionaries.
+
 ## [0.2.2] - 2025-12-24
 
 ### Added

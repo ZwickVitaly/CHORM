@@ -21,8 +21,9 @@ class Session:
     - `clear()` discards pending inserts from memory (does not affect database)
     """
 
-    def __init__(self, bind: Engine) -> None:
+    def __init__(self, bind: Engine, **kwargs: Any) -> None:
         self.bind = bind
+        self._connect_overrides = kwargs
         self._pending_inserts: Dict[Type[Table], List[Table]] = {}
 
     def execute(self, statement: Any, parameters: Optional[Dict[str, Any]] = None) -> Result:
@@ -36,22 +37,25 @@ class Session:
             Result object
         """
         if isinstance(statement, Select):
-            sql = statement.to_sql()
-            # TODO: Infer model from Select statement for automatic mapping
-            # Note: Select.to_sql() inlines values, so parameters might not be used if passed here
-            # But if statement is a raw string with %(param)s, parameters will work.
+            sql, compiled_params = self.bind.compile(statement)
+            
+            final_params = compiled_params
             if parameters:
-                 raw_result = self.bind.query(sql, parameters=parameters)
-            else:
-                 raw_result = self.bind.query(sql)
+                final_params = compiled_params.copy()
+                final_params.update(parameters)
+
+            raw_result = self.bind.query(sql, parameters=final_params, **self._connect_overrides)
             return Result(raw_result)
 
         elif isinstance(statement, (Insert, Update, Delete)):
-            sql = statement.to_sql()
+            sql, compiled_params = self.bind.compile(statement)
+
+            final_params = compiled_params
             if parameters:
-                self.bind.execute(sql, parameters=parameters)
-            else:
-                self.bind.execute(sql)
+                final_params = compiled_params.copy()
+                final_params.update(parameters)
+
+            self.bind.execute(sql, parameters=final_params, **self._connect_overrides)
             return Result(None)
 
         else:
@@ -67,13 +71,13 @@ class Session:
                 or upper_sql.startswith("EXPLAIN")
             ):
                 if parameters:
-                    return Result(self.bind.query(sql, parameters=parameters))
-                return Result(self.bind.query(sql))
+                    return Result(self.bind.query(sql, parameters=parameters, **self._connect_overrides))
+                return Result(self.bind.query(sql, **self._connect_overrides))
             else:
                 if parameters:
-                    self.bind.execute(sql, parameters=parameters)
+                    self.bind.execute(sql, parameters=parameters, **self._connect_overrides)
                 else:
-                    self.bind.execute(sql)
+                    self.bind.execute(sql, **self._connect_overrides)
                 return Result(None)
 
     def add(self, instance: Table) -> None:
@@ -133,8 +137,9 @@ class Session:
                     row.append(val)
                 data_tuples.append(row)
 
-            with self.bind.connect() as conn:
-                conn.insert(table_name, data_tuples, column_names=column_names)
+            # Pass connect overrides when getting connection for insert
+            with self.bind.connect(**self._connect_overrides) as conn:
+                conn.insert(table_name, data_tuples, column_names=column_names, **self._connect_overrides)
 
         self._pending_inserts.clear()
 
@@ -169,8 +174,13 @@ class Session:
             pandas.DataFrame
         """
         if isinstance(statement, Select):
-            sql = statement.to_sql()
+            sql, compiled_params = self.bind.compile(statement)
+            final_params = compiled_params
+            if parameters:
+                final_params = compiled_params.copy()
+                final_params.update(parameters)
         else:
             sql = str(statement)
+            final_params = parameters
             
-        return self.bind.query_df(sql, parameters=parameters)
+        return self.bind.query_df(sql, parameters=final_params, **self._connect_overrides)

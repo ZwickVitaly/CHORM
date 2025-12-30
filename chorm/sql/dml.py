@@ -74,7 +74,7 @@ class Insert(Expression):
         self._settings.update(kwargs)
         return self
 
-    def to_sql(self) -> str:
+    def to_sql(self, compiler: Any = None) -> str:
         """Render the INSERT statement to SQL.
 
         Note: This is mostly for debugging or small inserts.
@@ -90,7 +90,7 @@ class Insert(Expression):
                 sql += f" ({columns_str})"
 
             query_sql = (
-                self._select_query.to_sql() if hasattr(self._select_query, "to_sql") else str(self._select_query)
+                self._select_query.to_sql(compiler) if hasattr(self._select_query, "to_sql") else str(self._select_query)
             )
             sql += f" {query_sql}"
 
@@ -119,8 +119,10 @@ class Insert(Expression):
             row_vals = []
             for k in keys:
                 val = row.get(k)
-                # Basic escaping
-                if isinstance(val, str):
+                # Basic escaping or Parameterization
+                if compiler is not None:
+                     row_vals.append(compiler.add_param(val))
+                elif isinstance(val, str):
                     row_vals.append(f"'{_escape_string(val)}'")
                 elif val is None:
                     row_vals.append("NULL")
@@ -170,14 +172,14 @@ class Update(Expression):
         self._settings.update(kwargs)
         return self
 
-    def to_sql(self) -> str:
+    def to_sql(self, compiler: Any = None) -> str:
         """Render the UPDATE statement to SQL."""
         table_name = _get_qualified_name(self.table)
 
         assignments = []
         for k, v in self._values.items():
             val_expr = _coerce(v)
-            assignments.append(f"{k} = {val_expr.to_sql()}")
+            assignments.append(f"{k} = {val_expr.to_sql(compiler)}")
 
         assignment_clause = ", ".join(assignments)
 
@@ -186,7 +188,7 @@ class Update(Expression):
         if self._where_criteria:
             # ClickHouse ALTER TABLE UPDATE doesn't support table-qualified column names
             # Strip table prefix from WHERE clause
-            criteria = " AND ".join(self._strip_table_prefix(c.to_sql(), table_name) for c in self._where_criteria)
+            criteria = " AND ".join(self._strip_table_prefix(c.to_sql(compiler), table_name) for c in self._where_criteria)
             sql += f" WHERE {criteria}"
         else:
             # ClickHouse requires WHERE for mutations usually, but we won't enforce it here strictly
@@ -236,7 +238,7 @@ class Delete(Expression):
         self._settings.update(kwargs)
         return self
 
-    def to_sql(self) -> str:
+    def to_sql(self, compiler: Any = None) -> str:
         """Render the DELETE statement to SQL."""
         table_name = _get_qualified_name(self.table)
 
@@ -245,7 +247,7 @@ class Delete(Expression):
         if self._where_criteria:
             # ClickHouse ALTER TABLE DELETE doesn't support table-qualified column names
             # Strip table prefix from WHERE clause (reuse Update's method)
-            criteria = " AND ".join(Update._strip_table_prefix(c.to_sql(), table_name) for c in self._where_criteria)
+            criteria = " AND ".join(Update._strip_table_prefix(c.to_sql(compiler), table_name) for c in self._where_criteria)
             sql += f" WHERE {criteria}"
 
         if self._settings:

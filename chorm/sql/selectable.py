@@ -47,12 +47,12 @@ class JoinClause:
     on_condition: Optional[Expression] = None  # ON condition
     using_columns: Optional[List[str]] = None  # USING columns
 
-    def to_sql(self) -> str:
+    def to_sql(self, compiler: Any = None) -> str:
         """Render the JOIN clause to SQL."""
-        parts = [self.join_type, self.target.to_sql()]
+        parts = [self.join_type, self.target.to_sql(compiler)]
 
         if self.on_condition is not None:
-            parts.append(f"ON {self.on_condition.to_sql()}")
+            parts.append(f"ON {self.on_condition.to_sql(compiler)}")
         elif self.using_columns:
             columns_str = ", ".join(self.using_columns)
             parts.append(f"USING ({columns_str})")
@@ -67,17 +67,17 @@ class ArrayJoinClause:
     target: Union[Expression, List[Expression]]
     left: bool = False  # If True, renders as LEFT ARRAY JOIN
 
-    def to_sql(self) -> str:
+    def to_sql(self, compiler: Any = None) -> str:
         """Render the ARRAY JOIN clause to SQL."""
         join_type = "LEFT ARRAY JOIN" if self.left else "ARRAY JOIN"
 
         if isinstance(self.target, list):
             # Multiple arrays: ARRAY JOIN [arr1, arr2] or just ARRAY JOIN arr1, arr2
             # ClickHouse syntax: ARRAY JOIN arr1, arr2
-            targets = ", ".join(t.to_sql() for t in self.target)
+            targets = ", ".join(t.to_sql(compiler) for t in self.target)
             return f"{join_type} {targets}"
         else:
-            return f"{join_type} {self.target.to_sql()}"
+            return f"{join_type} {self.target.to_sql(compiler)}"
 
 
 @dataclass(frozen=True)
@@ -88,11 +88,11 @@ class LimitByClause(Expression):
     by: List[Expression]
     offset: Optional[int] = None
 
-    def to_sql(self) -> str:
+    def to_sql(self, compiler: Any = None) -> str:
         parts = [f"LIMIT {self.limit}"]
         if self.offset is not None:
             parts.append(f"OFFSET {self.offset}")
-        parts.append(f"BY {', '.join(e.to_sql() for e in self.by)}")
+        parts.append(f"BY {', '.join(e.to_sql(compiler) for e in self.by)}")
         return " ".join(parts)
 
 
@@ -563,8 +563,12 @@ class Select(Expression):
                     hint="Use a subquery or CTE to filter by window function result",
                 )
 
-    def to_sql(self) -> str:
-        """Render the SELECT statement to SQL."""
+    def to_sql(self, compiler: Any = None) -> str:
+        """Render the SELECT statement to SQL.
+        
+        Args:
+            compiler: Optional Compiler instance to collect parameters.
+        """
         # Validate query before generating SQL
         self._validate_query()
 
@@ -572,7 +576,7 @@ class Select(Expression):
 
         # Render WITH clause if CTEs exist
         if self._ctes:
-            cte_parts = ", ".join(cte.to_sql() for cte in self._ctes)
+            cte_parts = ", ".join(cte.to_sql(compiler) for cte in self._ctes)
             parts.append(f"WITH {cte_parts}")
 
         parts.append("SELECT")
@@ -583,49 +587,50 @@ class Select(Expression):
         if not self._columns:
             parts.append("*")
         else:
-            parts.append(", ".join(c.to_sql() for c in self._columns))
+            parts.append(", ".join(c.to_sql(compiler) for c in self._columns))
 
         if self._from:
-            parts.append(f"FROM {self._from.to_sql()}")
+            parts.append(f"FROM {self._from.to_sql(compiler)}")
 
         # Render JOIN and ARRAY JOIN clauses in order
         for join_clause in self._joins:
-            parts.append(join_clause.to_sql())
+            parts.append(join_clause.to_sql(compiler))
 
         if self._final:
             parts.append("FINAL")
 
         if self._sample:
-            parts.append(f"SAMPLE {self._sample.to_sql()}")
+            parts.append(f"SAMPLE {self._sample.to_sql(compiler)}")
 
         if self._prewhere_criteria:
-            criteria = " AND ".join(c.to_sql() for c in self._prewhere_criteria)
+            criteria = " AND ".join(c.to_sql(compiler) for c in self._prewhere_criteria)
             parts.append(f"PREWHERE {criteria}")
 
         if self._where_criteria:
-            criteria = " AND ".join(c.to_sql() for c in self._where_criteria)
+            criteria = " AND ".join(c.to_sql(compiler) for c in self._where_criteria)
             parts.append(f"WHERE {criteria}")
 
         if self._group_by_criteria:
-            criteria = ", ".join(c.to_sql() for c in self._group_by_criteria)
+            criteria = ", ".join(c.to_sql(compiler) for c in self._group_by_criteria)
             parts.append(f"GROUP BY {criteria}")
 
         if self._with_totals:
             parts.append("WITH TOTALS")
 
         if self._having_criteria:
-            criteria = " AND ".join(c.to_sql() for c in self._having_criteria)
+            criteria = " AND ".join(c.to_sql(compiler) for c in self._having_criteria)
             parts.append(f"HAVING {criteria}")
 
         if self._order_by_criteria:
-            criteria = ", ".join(c.to_sql() for c in self._order_by_criteria)
+            criteria = ", ".join(c.to_sql(compiler) for c in self._order_by_criteria)
             parts.append(f"ORDER BY {criteria}")
 
         if self._limit is not None:
             parts.append(f"LIMIT {self._limit}")
 
         if self._limit_by is not None:
-            parts.append(self._limit_by.to_sql())
+            # LimitByClause now accepts compiler
+            parts.append(self._limit_by.to_sql(compiler))
 
         if self._offset is not None:
             parts.append(f"OFFSET {self._offset}")
@@ -647,7 +652,7 @@ class Select(Expression):
             union_parts = [base_query]
             for union_type, query in self._union_queries:
                 union_parts.append(union_type)
-                union_parts.append(query.to_sql())
+                union_parts.append(query.to_sql(compiler))
             return " ".join(union_parts)
 
         return base_query
