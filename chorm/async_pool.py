@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import time
 from typing import Any, Dict, Optional
 
@@ -10,6 +11,8 @@ import clickhouse_connect
 
 from chorm.async_engine import AsyncConnection
 from chorm.engine import EngineConfig
+
+logger = logging.getLogger(__name__)
 
 
 class AsyncConnectionPool:
@@ -161,37 +164,35 @@ class AsyncConnectionPool:
             conn = self._pool.get_nowait()
 
             # Check if connection needs recycling
-            if self._should_recycle(conn):
-                await conn.close()
-                conn = await self._create_connection()
-            elif self._pre_ping and not await self._validate_connection(conn):
-                 # Connection dead, discard and create new one
-                await conn.close()
-                conn = await self._create_connection()
+            conn = await self._safe_recycle_or_validate(conn)
 
             return conn
 
         except asyncio.QueueEmpty:
             # Pool is empty, try to create overflow connection
+            can_overflow = False
             async with self._overflow_lock:
                 if self._overflow < self._max_overflow:
                     self._overflow += 1
+                    can_overflow = True
+
+            if can_overflow:
+                try:
                     overflow_conn = await self._create_connection()
-                    self._overflow_connections.add(id(overflow_conn))
-                    return overflow_conn
+                except Exception:
+                    # Creation failed — rollback overflow counter
+                    async with self._overflow_lock:
+                        self._overflow -= 1
+                    raise
+                self._overflow_connections.add(id(overflow_conn))
+                return overflow_conn
 
             # No overflow available, wait for a connection with timeout
             try:
                 conn = await asyncio.wait_for(self._pool.get(), timeout=self._timeout)
 
                 # Check if connection needs recycling
-                if self._should_recycle(conn):
-                    await conn.close()
-                    conn = await self._create_connection()
-                elif self._pre_ping and not await self._validate_connection(conn):
-                     # Connection dead, discard and create new one
-                    await conn.close()
-                    conn = await self._create_connection()
+                conn = await self._safe_recycle_or_validate(conn)
 
                 return conn
             except asyncio.TimeoutError:
@@ -221,13 +222,19 @@ class AsyncConnectionPool:
                     self._overflow -= 1
                 self._overflow_connections.discard(conn_id)
             else:
-                # Was a pooled connection, create replacement
-                new_conn = await self._create_connection()
+                # Was a pooled connection, try to create replacement
                 try:
-                    self._pool.put_nowait(new_conn)
-                except asyncio.QueueFull:
-                    # Pool is somehow full, close the new connection
-                    await new_conn.close()
+                    new_conn = await self._create_connection()
+                    try:
+                        self._pool.put_nowait(new_conn)
+                    except asyncio.QueueFull:
+                        await new_conn.close()
+                except Exception:
+                    # Cannot replace — pool loses a slot, but at least no leak
+                    logger.warning(
+                        "Failed to replace closed pooled connection; "
+                        "pool capacity temporarily reduced"
+                    )
 
             # Clean up creation time tracking
             self._created_at.pop(conn_id, None)
@@ -235,7 +242,10 @@ class AsyncConnectionPool:
             # Connection is still open
             if is_overflow:
                 # Overflow connection - close it
-                await conn.close()
+                try:
+                    await conn.close()
+                except Exception:
+                    pass
                 async with self._overflow_lock:
                     self._overflow -= 1
                 self._overflow_connections.discard(conn_id)
@@ -248,10 +258,56 @@ class AsyncConnectionPool:
                     self._pool.put_nowait(conn)
                 except asyncio.QueueFull:
                     # Pool is full somehow, close the connection
-                    await conn.close()
+                    try:
+                        await conn.close()
+                    except Exception:
+                        pass
 
                     # Clean up creation time tracking
                     self._created_at.pop(conn_id, None)
+
+    async def _safe_recycle_or_validate(self, conn: AsyncConnection) -> AsyncConnection:
+        """Recycle or validate a connection safely.
+
+        If the connection needs recycling or fails pre_ping,
+        attempts to replace it. If replacement fails, returns
+        the old connection rather than losing a pool slot.
+
+        Args:
+            conn: Connection to check
+
+        Returns:
+            A valid (or best-effort) AsyncConnection
+        """
+        needs_replace = False
+        if self._should_recycle(conn):
+            needs_replace = True
+        elif self._pre_ping and not await self._validate_connection(conn):
+            needs_replace = True
+
+        if not needs_replace:
+            return conn
+
+        # Try to create a replacement
+        try:
+            new_conn = await self._create_connection()
+        except Exception:
+            # Cannot create replacement — return old connection
+            # (stale is better than losing a pool slot entirely)
+            logger.warning(
+                "Failed to create replacement connection during recycle/validate; "
+                "reusing existing connection"
+            )
+            return conn
+
+        # Successfully created replacement — close old one
+        old_id = id(conn)
+        try:
+            await conn.close()
+        except Exception:
+            pass
+        self._created_at.pop(old_id, None)
+        return new_conn
 
     def _should_recycle(self, conn: AsyncConnection) -> bool:
         """Check if connection should be recycled based on age.
@@ -275,12 +331,19 @@ class AsyncConnectionPool:
         while not self._pool.empty():
             try:
                 conn = self._pool.get_nowait()
-                await conn.close()
+                try:
+                    await conn.close()
+                except Exception:
+                    pass
 
                 # Clean up creation time tracking
                 self._created_at.pop(id(conn), None)
             except asyncio.QueueEmpty:
                 break
+
+    async def close(self) -> None:
+        """Close the pool (alias for close_all)."""
+        await self.close_all()
 
     @property
     def size(self) -> int:
