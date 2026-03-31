@@ -50,10 +50,15 @@ class _AsyncConnectionContextManager:
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         if self._conn is not None:
-            if self._engine.pool is not None:
-                # Return to pool
-                await self._engine.pool.return_connection(self._conn)
-            else:
-                # Close connection
-                await self._conn.close()
+            try:
+                if self._engine.pool is not None:
+                    # Return to pool
+                    await self._engine.pool.return_connection(self._conn)
+                else:
+                    # Close connection
+                    await self._conn.close()
+            except BaseException:
+                # Guarantee cleanup even on CancelledError
+                if not self._conn.closed:
+                    self._conn._closed = True
         return False

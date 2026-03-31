@@ -5,6 +5,28 @@ All notable changes to CHORM will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.5] - 2026-04-01
+
+### Fixed
+- **Critical: Race condition in pool `initialize()`** — added `asyncio.Lock` to prevent concurrent initialization which caused connection leaks and coroutine deadlocks when multiple requests arrived before pool was initialized.
+- **Critical: `CancelledError` not caught in close handlers** — replaced `except Exception` with `except BaseException` in all connection close paths. In Python 3.12+, `CancelledError` inherits from `BaseException`, so cancelled coroutines were leaking `ThreadPoolExecutor` instances (16 threads = 16 FDs each).
+- **TCP socket leak on connection recycle** — `AsyncConnection.close()` now calls `close_connections()` on the underlying `HttpClient` to explicitly release TCP sockets from the shared `urllib3.PoolManager`.
+- **Context manager safety** — `_AsyncConnectionContextManager.__aexit__` now catches `BaseException` and force-marks connections as closed, preventing leaks even when `return_connection` is interrupted.
+
+### Added
+- **`_close_connection_safe()` helper** — closes connections with a configurable timeout (default 5s) to prevent hanging on blocked `executor.shutdown()`.
+
+## [0.2.4] - 2026-03-05
+
+### Fixed
+- **Critical: Pool overflow counter leak** — when `_create_connection()` failed (e.g., database unavailable), the `_overflow` counter was incremented but never decremented. After `max_overflow` failures, the pool became permanently exhausted, forcing all new connections to bypass the pool entirely. Each bypassed connection created a new `ThreadPoolExecutor` (up to 16 threads) and `urllib3.PoolManager` (8 sockets), rapidly consuming file descriptors.
+- **Pool slot loss on recycle failure** — introduced `_safe_recycle_or_validate()` to ensure that if a replacement connection cannot be created during recycling or pre-ping validation, the original connection is returned instead of permanently losing the pool slot.
+- **Exception safety in `return_connection()`** — improved error handling when closing overflow and pooled connections to prevent silent resource leaks.
+
+### Added
+- `close()` method as alias for `close_all()` for cleaner pool shutdown.
+- Logging for pool diagnostics (connection replacement failures, recycle warnings).
+
 ## [0.2.3] - 2025-12-30
 
 ### Security
@@ -258,6 +280,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 60 integration tests with live ClickHouse
 - Full test coverage for all major features
 
+[0.2.5]: https://github.com/zwickvitaly/chorm/releases/tag/v0.2.5
+[0.2.4]: https://github.com/zwickvitaly/chorm/releases/tag/v0.2.4
 [0.1.3]: https://github.com/zwickvitaly/chorm/releases/tag/v0.1.3
 [0.1.2]: https://github.com/zwickvitaly/chorm/releases/tag/v0.1.2
 [0.1.1]: https://github.com/zwickvitaly/chorm/releases/tag/v0.1.1

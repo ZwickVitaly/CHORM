@@ -14,6 +14,9 @@ from chorm.engine import EngineConfig
 
 logger = logging.getLogger(__name__)
 
+# Timeout for graceful executor shutdown (seconds)
+_CLOSE_TIMEOUT = 5.0
+
 
 class AsyncConnectionPool:
     """Async connection pool for ClickHouse clients.
@@ -81,22 +84,25 @@ class AsyncConnectionPool:
         # Track connection creation times for recycling
         self._created_at: Dict[int, float] = {}
 
-        # Initialization flag
+        # Initialization lock + flag
+        self._init_lock = asyncio.Lock()
         self._initialized = False
 
     async def initialize(self) -> None:
         """Initialize the pool by pre-creating connections.
 
-        Should be called once before using the pool.
+        Thread-safe: uses asyncio.Lock to prevent concurrent initialization
+        which would cause connection leaks and deadlocks.
         """
-        if self._initialized:
-            return
+        async with self._init_lock:
+            if self._initialized:
+                return
 
-        for _ in range(self._pool_size):
-            conn = await self._create_connection()
-            await self._pool.put(conn)
+            for _ in range(self._pool_size):
+                conn = await self._create_connection()
+                await self._pool.put(conn)
 
-        self._initialized = True
+            self._initialized = True
 
     async def _create_connection(self) -> AsyncConnection:
         """Create a new async connection to ClickHouse.
@@ -144,6 +150,22 @@ class AsyncConnectionPool:
         except Exception:
             return False
 
+    @staticmethod
+    async def _close_connection_safe(conn: AsyncConnection, timeout: float = _CLOSE_TIMEOUT) -> None:
+        """Close a connection with timeout to prevent hanging on executor shutdown.
+
+        Uses BaseException to also catch CancelledError.
+
+        Args:
+            conn: Connection to close
+            timeout: Maximum time to wait for close
+        """
+        try:
+            await asyncio.wait_for(conn.close(), timeout=timeout)
+        except BaseException:
+            # Force-mark as closed even if close() failed/timed out/cancelled
+            conn._closed = True
+
     async def get(self) -> AsyncConnection:
         """Get a connection from the pool.
 
@@ -179,7 +201,7 @@ class AsyncConnectionPool:
             if can_overflow:
                 try:
                     overflow_conn = await self._create_connection()
-                except Exception:
+                except BaseException:
                     # Creation failed — rollback overflow counter
                     async with self._overflow_lock:
                         self._overflow -= 1
@@ -228,8 +250,8 @@ class AsyncConnectionPool:
                     try:
                         self._pool.put_nowait(new_conn)
                     except asyncio.QueueFull:
-                        await new_conn.close()
-                except Exception:
+                        await self._close_connection_safe(new_conn)
+                except BaseException:
                     # Cannot replace — pool loses a slot, but at least no leak
                     logger.warning(
                         "Failed to replace closed pooled connection; "
@@ -242,10 +264,7 @@ class AsyncConnectionPool:
             # Connection is still open
             if is_overflow:
                 # Overflow connection - close it
-                try:
-                    await conn.close()
-                except Exception:
-                    pass
+                await self._close_connection_safe(conn)
                 async with self._overflow_lock:
                     self._overflow -= 1
                 self._overflow_connections.discard(conn_id)
@@ -258,10 +277,7 @@ class AsyncConnectionPool:
                     self._pool.put_nowait(conn)
                 except asyncio.QueueFull:
                     # Pool is full somehow, close the connection
-                    try:
-                        await conn.close()
-                    except Exception:
-                        pass
+                    await self._close_connection_safe(conn)
 
                     # Clean up creation time tracking
                     self._created_at.pop(conn_id, None)
@@ -291,7 +307,7 @@ class AsyncConnectionPool:
         # Try to create a replacement
         try:
             new_conn = await self._create_connection()
-        except Exception:
+        except BaseException:
             # Cannot create replacement — return old connection
             # (stale is better than losing a pool slot entirely)
             logger.warning(
@@ -302,10 +318,7 @@ class AsyncConnectionPool:
 
         # Successfully created replacement — close old one
         old_id = id(conn)
-        try:
-            await conn.close()
-        except Exception:
-            pass
+        await self._close_connection_safe(conn)
         self._created_at.pop(old_id, None)
         return new_conn
 
@@ -331,10 +344,7 @@ class AsyncConnectionPool:
         while not self._pool.empty():
             try:
                 conn = self._pool.get_nowait()
-                try:
-                    await conn.close()
-                except Exception:
-                    pass
+                await self._close_connection_safe(conn)
 
                 # Clean up creation time tracking
                 self._created_at.pop(id(conn), None)

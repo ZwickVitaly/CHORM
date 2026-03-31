@@ -249,8 +249,16 @@ class AsyncConnection:
 
     async def close(self) -> None:
         if not self._closed:
-            await self._client.close()
-            self._closed = True
+            try:
+                # Close the AsyncClient (shuts down ThreadPoolExecutor)
+                await self._client.close()
+                # Also force-close underlying HTTP connections to release TCP sockets
+                if hasattr(self._client, 'client') and hasattr(self._client.client, 'close_connections'):
+                    self._client.client.close_connections()
+            except BaseException:
+                pass
+            finally:
+                self._closed = True
 
     async def query(
         self,
