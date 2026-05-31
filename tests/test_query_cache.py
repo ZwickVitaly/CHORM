@@ -2,13 +2,11 @@
 
 import time
 
-import pytest
-
 from chorm.query_cache import (
     CachedQuery,
     QueryCache,
-    enable_global_cache,
     disable_global_cache,
+    enable_global_cache,
     get_global_cache,
 )
 

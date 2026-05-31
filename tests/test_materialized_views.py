@@ -1,9 +1,10 @@
 """Tests for materialized view operations."""
 
 import pytest
-from chorm import create_materialized_view, select, Table, Column
-from chorm.types import UInt64, String
+
+from chorm import Column, Table, create_materialized_view, select
 from chorm.table_engines import SummingMergeTree
+from chorm.types import String, UInt64
 
 
 class SourceTable(Table):
@@ -45,7 +46,7 @@ def test_create_mv_if_not_exists():
 
 def test_declarative_mv_ddl():
     """Test CREATE MATERIALIZED VIEW generation from Declarative Model."""
-    from chorm import Table, MaterializedView, MergeTree
+    from chorm import MaterializedView, MergeTree, Table
     # select is imported at module level
 
     class Source(Table):
@@ -77,20 +78,20 @@ def test_declarative_mv_ddl():
 
 def test_declarative_mv_with_inner_engine():
     """Test MVs with explicit internal storage engine."""
-    from chorm import Table, MaterializedView, MergeTree
+    from chorm import MaterializedView, MergeTree, Table
     # select is imported at module level
 
     class Source(Table):
         __tablename__ = "source"
         id = Column(UInt64())
-        
+
     class View(Table):
         __tablename__ = "mv_inner"
         __engine__ = MaterializedView(engine=MergeTree(), populate=True)
         # Strict VM requires local columns definition matching select
         # SELECT Source.id -> expects local column 'id' (or matching name)
         id = Column(UInt64())
-        
+
         __select__ = select(Source.id).select_from(Source)
 
     ddl = View.create_table()
@@ -99,16 +100,15 @@ def test_declarative_mv_with_inner_engine():
     assert "POPULATE" in ddl
     assert "AS SELECT" in ddl
 
+
 def test_mv_configuration_errors():
     """Test invalid MV configurations."""
     from chorm import MaterializedView, MergeTree
     from chorm.exceptions import ConfigurationError
-    
+
     # Fix regex ("us" -> "use")
     with pytest.raises(ConfigurationError, match="Cannot use 'populate=True' with 'to_table'"):
         MaterializedView(to_table="t", populate=True)
-        
+
     with pytest.raises(ConfigurationError, match="Cannot specify storage 'engine'"):
         MaterializedView(to_table="t", engine=MergeTree())
-
-

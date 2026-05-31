@@ -9,7 +9,7 @@ from chorm.sql.expression import Expression, _coerce
 
 def _get_qualified_name(obj: Any) -> str:
     """Get fully qualified table name from object.
-    
+
     Returns database.table if configured, otherwise just table name.
     """
     if hasattr(obj, "__table__") and hasattr(obj.__table__, "qualified_name"):
@@ -21,7 +21,7 @@ def _get_qualified_name(obj: Any) -> str:
 
 class CreateDatabase(Expression):
     """Represents a CREATE DATABASE statement.
-    
+
     Example:
         stmt = create_database("radar", if_not_exists=True)
         session.execute(stmt.to_sql())
@@ -73,7 +73,7 @@ class CreateDatabase(Expression):
 
 class DropDatabase(Expression):
     """Represents a DROP DATABASE statement.
-    
+
     Example:
         stmt = drop_database("radar", if_exists=True)
         session.execute(stmt.to_sql())
@@ -218,10 +218,8 @@ class AlterTableAddColumn(Expression):
         """Render the ALTER TABLE ADD COLUMN statement to SQL."""
         table_name = _get_qualified_name(self.table)
 
-
         # Get column definition
         from chorm.declarative import Column
-
 
         if isinstance(self.column, Column):
             col_name = self.column.name
@@ -315,8 +313,6 @@ class AlterTableModifyColumn(Expression):
     def to_sql(self) -> str:
         """Render the ALTER TABLE MODIFY COLUMN statement to SQL."""
         table_name = _get_qualified_name(self.table)
-
-
 
         # Get column definition
         from chorm.declarative import Column
@@ -485,14 +481,14 @@ def create_database(
     **settings: Any,
 ) -> CreateDatabase:
     """Create a CREATE DATABASE statement.
-    
+
     Args:
         name: Database name
         if_not_exists: Add IF NOT EXISTS clause
         engine: Database engine (Atomic, Replicated, Lazy, etc.)
         comment: Optional comment
         **settings: Additional SETTINGS
-        
+
     Example:
         stmt = create_database("radar", if_not_exists=True)
         session.execute(stmt.to_sql())
@@ -505,12 +501,12 @@ def create_database(
 
 def drop_database(name: str, if_exists: bool = True, **settings: Any) -> DropDatabase:
     """Create a DROP DATABASE statement.
-    
+
     Args:
         name: Database name
         if_exists: Add IF EXISTS clause (default True for safety)
         **settings: Additional SETTINGS
-        
+
     Example:
         stmt = drop_database("radar")
         session.execute(stmt.to_sql())
@@ -1082,17 +1078,17 @@ def create_dictionary(
 
 class CreateTableAsSelect(Expression):
     """Represents a CREATE TABLE ... AS SELECT statement.
-    
+
     This is useful for creating tables with the same structure as a query result,
     optionally populating them with the query data.
-    
+
     Examples:
         # Create empty table with structure from SELECT
         create_table_as_select("new_table", select(User.id, User.name).where(User.active == 1))
-        
+
         # Create table with specific engine
         create_table_as_select("events_backup", select(Events), engine=MergeTree())
-        
+
         # Create with all options
         create_table_as_select(
             "aggregated_stats",
@@ -1114,7 +1110,7 @@ class CreateTableAsSelect(Expression):
         if_not_exists: bool = False,
     ) -> None:
         """Initialize CREATE TABLE AS SELECT statement.
-        
+
         Args:
             name: Name of the table to create
             query: SELECT statement (Select object or raw SQL string)
@@ -1197,10 +1193,10 @@ def create_table_as_select(
     **settings: Any,
 ) -> CreateTableAsSelect:
     """Create a CREATE TABLE ... AS SELECT statement.
-    
+
     This is useful for creating tables with the same structure as a query result,
     optionally populating them with the query data.
-    
+
     Args:
         name: Name of the table to create
         query: SELECT statement (Select object or raw SQL string)
@@ -1210,23 +1206,23 @@ def create_table_as_select(
         primary_key: PRIMARY KEY columns (defaults to order_by if not specified)
         if_not_exists: Add IF NOT EXISTS clause
         **settings: Additional SETTINGS parameters
-        
+
     Returns:
         CreateTableAsSelect statement object
-        
+
     Examples:
         # Basic CTAS
         stmt = create_table_as_select("backup", select(User))
-        
+
         # With MergeTree engine
         from chorm.table_engines import MergeTree
         stmt = create_table_as_select(
-            "stats", 
+            "stats",
             select(User.id, func.count()).group_by(User.id),
             engine=MergeTree(),
             order_by=["id"]
         )
-        
+
         # Execute
         session.execute(stmt.to_sql())
     """

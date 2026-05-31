@@ -1,6 +1,6 @@
 """Tests for query profiling and complexity analysis."""
 
-from chorm.profiler import QueryAnalyzer, QueryComplexity
+from chorm.profiler import QueryAnalyzer
 
 
 class TestQueryAnalyzer:

@@ -1,17 +1,17 @@
 """Tests for advanced aggregate functions."""
 
 from chorm.sql.expression import (
-    top_k,
-    top_k_weighted,
-    group_bitmap,
+    Identifier,
+    any_heavy,
+    any_last,
+    arg_max,
+    arg_min,
     group_bit_and,
     group_bit_or,
     group_bit_xor,
-    any_last,
-    any_heavy,
-    arg_max,
-    arg_min,
-    Identifier,
+    group_bitmap,
+    top_k,
+    top_k_weighted,
 )
 
 
@@ -60,15 +60,9 @@ def test_any_heavy():
 
 def test_arg_max():
     """Test argMax aggregate."""
-    assert (
-        arg_max(Identifier("name"), Identifier("updated_at")).to_sql()
-        == "argMax(name, updated_at)"
-    )
+    assert arg_max(Identifier("name"), Identifier("updated_at")).to_sql() == "argMax(name, updated_at)"
 
 
 def test_arg_min():
     """Test argMin aggregate."""
-    assert (
-        arg_min(Identifier("name"), Identifier("created_at")).to_sql()
-        == "argMin(name, created_at)"
-    )
+    assert arg_min(Identifier("name"), Identifier("created_at")).to_sql() == "argMin(name, created_at)"

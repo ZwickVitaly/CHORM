@@ -11,35 +11,34 @@ Run: python examples/query_optimization_demo.py
 """
 
 from chorm import (
-    create_engine,
-    QuerySettings,
-    QueryOptimizer,
-    ExecutionStats,
-    get_preset,
     SETTINGS_PRESETS,
+    ExecutionStats,
+    QueryOptimizer,
+    QuerySettings,
+    get_preset,
 )
 
 
 def demo_settings_presets():
     """Demo: Using predefined settings presets."""
     print("\n=== Settings Presets ===\n")
-    
+
     print("Available presets:")
-    for name in SETTINGS_PRESETS.keys():
+    for name in SETTINGS_PRESETS:
         print(f"  - {name}")
-    
+
     print("\n1. Fast preset (optimized for speed):")
     fast = get_preset("fast")
     print(f"   {fast}")
-    
+
     print("\n2. Memory efficient preset (low memory usage):")
     memory_efficient = get_preset("memory_efficient")
-    print(f"   {fast}")
-    
+    print(f"   {memory_efficient}")
+
     print("\n3. Heavy analytics preset (long-running queries):")
     heavy = get_preset("heavy_analytics")
     print(f"   {heavy}")
-    
+
     print("\n4. Interactive preset (quick responses):")
     interactive = get_preset("interactive")
     print(f"   {interactive}")
@@ -48,7 +47,7 @@ def demo_settings_presets():
 def demo_custom_settings():
     """Demo: Creating custom settings."""
     print("\n=== Custom Settings ===\n")
-    
+
     settings = QuerySettings(
         max_threads=8,
         max_memory_usage=10_000_000_000,  # 10GB
@@ -56,10 +55,10 @@ def demo_custom_settings():
         optimize_read_in_order=True,
         use_query_cache=True
     )
-    
+
     print("Custom settings:")
     print(f"  SETTINGS {settings}")
-    
+
     print("\nUsage in SQL:")
     sql = f"""
     SELECT user_id, COUNT(*) as order_count
@@ -74,9 +73,9 @@ def demo_custom_settings():
 def demo_query_optimizer():
     """Demo: Using QueryOptimizer for recommendations."""
     print("\n=== Query Optimizer ===\n")
-    
+
     optimizer = QueryOptimizer()
-    
+
     print("1. Recommendations for interactive query:")
     settings = optimizer.recommend_settings(
         query_type="select",
@@ -86,7 +85,7 @@ def demo_query_optimizer():
     print(f"   Threads: {settings.max_threads}")
     print(f"   Memory: {settings.max_memory_usage:,} bytes")
     print(f"   Timeout: {settings.max_execution_time}s")
-    
+
     print("\n2. Recommendations for analytics query:")
     settings = optimizer.recommend_settings(
         query_type="analytics",
@@ -98,7 +97,7 @@ def demo_query_optimizer():
     print(f"   Memory: {settings.max_memory_usage:,} bytes")
     print(f"   Timeout: {settings.max_execution_time}s")
     print(f"   Optimizations: read_in_order={settings.optimize_read_in_order}")
-    
+
     print("\n3. Query hints:")
     final_hint = optimizer.get_query_hint("final")
     sample_hint = optimizer.get_query_hint("sample")
@@ -109,7 +108,7 @@ def demo_query_optimizer():
 def demo_execution_stats():
     """Demo: Tracking execution statistics."""
     print("\n=== Execution Statistics ===\n")
-    
+
     # Simulated stats
     stats = ExecutionStats(
         elapsed_time=2.345,
@@ -117,10 +116,10 @@ def demo_execution_stats():
         bytes_read=50_000_000,
         memory_usage=100_000_000
     )
-    
+
     print("Query execution statistics:")
     print(stats)
-    
+
     print("\nAs dictionary:")
     print(stats.to_dict())
 
@@ -128,13 +127,13 @@ def demo_execution_stats():
 def demo_real_world_example():
     """Demo: Real-world optimization example."""
     print("\n=== Real-World Example ===\n")
-    
+
     # Scenario: Heavy analytics query on large dataset
     print("Scenario: Analyzing 100M orders for monthly reports")
     print()
-    
+
     optimizer = QueryOptimizer()
-    
+
     # Get recommendations
     settings = optimizer.recommend_settings(
         query_type="analytics",
@@ -142,10 +141,10 @@ def demo_real_world_example():
         complexity="high",
         time_limit=1800  # 30 minutes
     )
-    
+
     # Build optimized query
     sql = f"""
-    SELECT 
+    SELECT
         toYYYYMM(order_date) as month,
         product_category,
         SUM(amount) as total_sales,
@@ -156,53 +155,51 @@ def demo_real_world_example():
     ORDER BY month DESC, total_sales DESC
     SETTINGS {settings}
     """
-    
+
     print("Optimized SQL:")
     print(sql)
-    
+
     print("\nSettings breakdown:")
     print(f"  • Max threads: {settings.max_threads} (parallel processing)")
     print(f"  • Memory limit: {settings.max_memory_usage / 1e9:.0f}GB (prevents OOM)")
     print(f"  • Timeout: {settings.max_execution_time / 60:.0f}min (fail-fast)")
-    print(f"  • Optimizations: In-order read & aggregation (faster)")
+    print("  • Optimizations: In-order read & aggregation (faster)")
 
 
 def demo_preset_comparison():
     """Demo: Compare different presets."""
     print("\n=== Preset Comparison ===\n")
-    
+
     presets_to_compare = ["fast", "memory_efficient", "heavy_analytics", "interactive"]
-    
+
     print(f"{'Preset':<20} {'Threads':<10} {'Memory (GB)':<15} {'Timeout (s)':<12}")
     print("-" * 60)
-    
+
     for name in presets_to_compare:
         preset = get_preset(name)
         threads = preset.max_threads or "N/A"
         memory = f"{preset.max_memory_usage / 1e9:.1f}" if preset.max_memory_usage else "N/A"
         timeout = preset.max_execution_time or "N/A"
-        
+
         print(f"{name:<20} {threads:<10} {memory:<15} {timeout:<12}")
 
 
 def demo_settings_in_engine():
     """Demo: Using settings with CHORM engine."""
     print("\n=== Settings with CHORM Engine ===\n")
-    
-    engine = create_engine("clickhouse://localhost:8123/default")
-    
+
     # Use preset
     settings = get_preset("interactive")
-    
+
     print("Example query with settings:")
     query_sql = f"""
-    SELECT * FROM users 
-    WHERE active = 1 
+    SELECT * FROM users
+    WHERE active = 1
     LIMIT 100
     SETTINGS {settings}
     """
     print(query_sql)
-    
+
     print("\nNote: Settings are appended to the SQL query")
     print("      ClickHouse applies them at execution time")
 
@@ -211,7 +208,7 @@ if __name__ == "__main__":
     print("=" * 60)
     print("Query Optimization Demo")
     print("=" * 60)
-    
+
     try:
         demo_settings_presets()
         demo_custom_settings()
@@ -220,19 +217,18 @@ if __name__ == "__main__":
         demo_real_world_example()
         demo_preset_comparison()
         demo_settings_in_engine()
-        
+
         print("\n" + "=" * 60)
         print("✓ Demo completed successfully!")
         print("=" * 60)
-        
+
         print("\n💡 Key Takeaways:")
         print("  1. Use presets for common scenarios (fast, memory_efficient, etc.)")
         print("  2. QueryOptimizer recommends settings based on query characteristics")
         print("  3. SETTINGS clause is appended to SQL queries")
         print("  4. ExecutionStats helps track query performance")
         print("  5. Customize settings for specific use cases")
-        
+
     except Exception as e:
         print(f"\n✗ Error: {e}")
         print("\nNote: Some examples require ClickHouse connection")
-

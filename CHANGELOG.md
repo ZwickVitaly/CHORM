@@ -5,6 +5,21 @@ All notable changes to CHORM will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-05-31
+
+### Added
+- **Asynchronous and Synchronous Query Streaming** — introduced `session.stream(...)` (available on both `Session` and `AsyncSession`) that utilizes clickhouse-connect's native row block stream, permitting low-memory, batch-by-batch iteration over large result sets and automatic mapping to declarative model classes.
+- **Pre-commit and Linter Migration** — replaced `black` formatting system with `ruff` linter and formatter, configuring custom rule sets (`E`, `F`, `W`, `I`, `UP`, `B`, `SIM`, `TCH`, `RUF`) in `pyproject.toml` and filtering pre-commit hooks to focus only on `chorm` and `tests` directories.
+- **Unit and Integration Testing** — added comprehensive unit testing (`test_async_session_commit`) and integration tests (`test_streaming_integration`) to cover new streaming APIs and guarantee connection-management correctness.
+
+### Changed
+- **ClickHouse Connect Client Upgrade** — bumped dependencies in `pyproject.toml` to require `clickhouse-connect[async]>=1.1.1` to enable full native async query capability and connection pooling.
+- **Modernized Documentation and Code Examples** — updated all documentation inside `docs/` and demo scripts inside `examples/` to use standard `__engine__ = ...` declarative table engine definitions.
+- **Robust Connection Handling in Examples** — wrapped demo scripts' database blocks in defensive connection check handlers to output human-readable warnings instead of raw connection failures and tracebacks.
+
+### Fixed
+- **Critical AsyncSession connection failure** — resolved a major connection leak/crash in `AsyncSession.commit()` which was invoking the synchronous `.connect()` method on the async engine instead of `.connection()`.
+
 ## [0.2.5] - 2026-04-01
 
 ### Fixed
@@ -30,7 +45,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.2.3] - 2025-12-30
 
 ### Security
-- **Native SQL Parameterization**: Refactored SQL generation to use native driver parameterization. 
+- **Native SQL Parameterization**: Refactored SQL generation to use native driver parameterization.
     - Introduced `Compiler` class to separate query structure from data.
     - `Expression.to_sql()` now delegates value handling to the driver via bind parameters.
     - `Literal` values (numbers, strings, dates) are passed as parameters, preventing SQL injection and ensuring correct type formatting.
@@ -71,7 +86,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Refactored Declarative API for MVs**:
     - Support for class references in `MaterializedView(to_table=User)`.
     - `__from_table__` attribute for auto-generating simple `SELECT *` views without manual SQL.
-- **Enhanced Introspection**: 
+- **Enhanced Introspection**:
     - Generates pythonic model code using class references for Materialized Views.
     - Improved topological sorting of generated models (tables before views).
 - **Pandas Integration**: Added `query_df()` to `Engine`, `Session`, `AsyncEngine`, and `AsyncSession` for direct DataFrame export (requires `pandas`).
@@ -116,7 +131,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - **ClickHouse Codec Support**: Added `codec` parameter to `Column` (e.g., `Column(..., codec=ZSTD(1))`).
 - **SQLAlchemy-style Metadata**: Added `MetaData` registry for schema management (`metadata.create_all()`, `metadata.drop_all()`).
-- **Alembic-style CLI**: 
+- **Alembic-style CLI**:
     - Redesigned project structure: `migrations/versions/` and `migrations/env.py`.
     - `env.py` for configuring auto-migration metadata.
     - Multiple migration naming modes: `uuid` (default), `int`, `django`.
@@ -280,6 +295,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 60 integration tests with live ClickHouse
 - Full test coverage for all major features
 
+[0.3.0]: https://github.com/zwickvitaly/chorm/releases/tag/v0.3.0
 [0.2.5]: https://github.com/zwickvitaly/chorm/releases/tag/v0.2.5
 [0.2.4]: https://github.com/zwickvitaly/chorm/releases/tag/v0.2.4
 [0.1.3]: https://github.com/zwickvitaly/chorm/releases/tag/v0.1.3

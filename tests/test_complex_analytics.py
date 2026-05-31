@@ -3,10 +3,10 @@
 Tests multi-level nesting, CTEs, subqueries, aggregations, and labeling.
 """
 
-from chorm import Table, Column, select, cte
-from chorm.types import UInt64, String, DateTime, Decimal
+from chorm import Column, Table, cte, select
+from chorm.sql.expression import func
 from chorm.table_engines import MergeTree
-from chorm.sql.expression import func, Identifier
+from chorm.types import DateTime, Decimal, String, UInt64
 
 
 class Order(Table):

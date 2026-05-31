@@ -1,7 +1,9 @@
 """Tests for migration core logic."""
 
+from unittest.mock import MagicMock
+
 import pytest
-from unittest.mock import MagicMock, call
+
 from chorm.migration import Migration, MigrationManager
 from chorm.session import Session
 
@@ -18,7 +20,6 @@ class ExampleMigration(Migration):
 
 
 class TestMigrationManager:
-
     @pytest.fixture
     def mock_session(self):
         return MagicMock(spec=Session)

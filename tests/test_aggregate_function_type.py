@@ -1,18 +1,15 @@
 """Tests for AggregateFunctionType."""
 
-import pytest
+from chorm import Column
+from chorm.sql.expression import func
 from chorm.types import (
-    AggregateFunctionType,
     AggregateFunction,
-    parse_type,
-    UInt64,
-    UInt32,
+    AggregateFunctionType,
     String,
     UInt8,
-    ConversionError,
+    UInt64,
+    parse_type,
 )
-from chorm.sql.expression import func
-from chorm import Column
 
 
 class TestAggregateFunctionType:
@@ -168,4 +165,3 @@ class TestAggregateFunctionType:
         col = Column(AggregateFunction(func.sum, (UInt64(),)))
         assert isinstance(col.field_type, AggregateFunctionType)
         assert col.field_type.func_name == "sum"
-

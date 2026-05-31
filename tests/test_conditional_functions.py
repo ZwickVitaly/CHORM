@@ -1,25 +1,24 @@
 """Unit tests for ClickHouse conditional and array functions."""
 
-import pytest
 from chorm.sql.expression import (
-    # Conditional functions (-If combinator)
-    sum_if,
-    count_if,
-    avg_if,
-    min_if,
-    max_if,
-    uniq_if,
-    group_array_if,
-    median_if,
-    # Array functions
-    group_uniq_array,
-    sum_array,
-    avg_array,
-    array_concat,
+    BinaryExpression,
     # For testing
     Identifier,
     Literal,
-    BinaryExpression,
+    array_concat,
+    avg_array,
+    avg_if,
+    count_if,
+    group_array_if,
+    # Array functions
+    group_uniq_array,
+    max_if,
+    median_if,
+    min_if,
+    sum_array,
+    # Conditional functions (-If combinator)
+    sum_if,
+    uniq_if,
 )
 
 

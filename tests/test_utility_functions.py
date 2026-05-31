@@ -1,19 +1,18 @@
 """Tests for utility functions (String, Date)."""
 
-from chorm import select
 from chorm.sql.expression import (
-    trim,
-    ltrim,
-    rtrim,
-    replace,
-    split_by_char,
-    to_year,
-    to_month,
-    to_day,
-    add_days,
-    add_months,
     Identifier,
     Literal,
+    add_days,
+    add_months,
+    ltrim,
+    replace,
+    rtrim,
+    split_by_char,
+    to_day,
+    to_month,
+    to_year,
+    trim,
 )
 
 

@@ -7,7 +7,7 @@ import logging
 import time
 from dataclasses import dataclass
 from threading import Lock
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -312,8 +312,8 @@ def disable_global_cache() -> None:
 __all__ = [
     "CachedQuery",
     "QueryCache",
+    "disable_global_cache",
+    "enable_global_cache",
     "get_global_cache",
     "set_global_cache",
-    "enable_global_cache",
-    "disable_global_cache",
 ]

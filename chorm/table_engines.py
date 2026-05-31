@@ -42,14 +42,13 @@ class TableEngine:
         else:
             if len(args) > len(self.arg_names):
                 raise EngineConfigurationError(
-                    f"{self.engine_name} accepts at most {len(self.arg_names)} positional arguments; "
-                    f"got {len(args)}"
+                    f"{self.engine_name} accepts at most {len(self.arg_names)} positional arguments; got {len(args)}"
                 )
             values.extend(args)
             while len(values) < len(self.arg_names):
                 values.append(None)
 
-        for name, value in zip(self.arg_names, values):
+        for name, value in zip(self.arg_names, values, strict=False):
             if name in self.required_args and value is None:
                 raise EngineConfigurationError(f"Argument '{name}' is required for engine {self.engine_name}")
 
@@ -298,16 +297,17 @@ class View(TableEngine):
 
 class MaterializedView(TableEngine):
     """Materialized View engine (marker).
-    
+
     This is a special engine marker for defining Materialized Views.
     It is not a real ClickHouse table engine in the "ENGINE = ..." sense when used with "TO table",
     but serves as the configuration for generating "CREATE MATERIALIZED VIEW" statements.
-    
+
     Syntax: MaterializedView(to_table="target_table"[, populate=True])
     """
+
     engine_name = "MaterializedView"
     arg_names = ("to_table",)
-    
+
     def __init__(
         self,
         to_table: str | Any | None = None,
@@ -318,18 +318,14 @@ class MaterializedView(TableEngine):
     ):
         # Resolve to_table if it's a class (Table model)
         if to_table is not None and not isinstance(to_table, str):
-            if hasattr(to_table, "__tablename__"):
-                to_table = to_table.__tablename__
-            else:
-                # Fallback or error? defaulting to str conversion might be risky if it's just 'Model'
-                to_table = str(to_table)
+            to_table = to_table.__tablename__ if hasattr(to_table, "__tablename__") else str(to_table)
 
         if to_table and populate:
             raise ConfigurationError(
                 "Cannot use 'populate=True' with 'to_table' in MaterializedView. "
                 "ClickHouse does not support POPULATE when TO table is specified."
             )
-        
+
         if to_table and engine:
             raise ConfigurationError(
                 "Cannot specify storage 'engine' when 'to_table' is used in MaterializedView. "
@@ -337,16 +333,16 @@ class MaterializedView(TableEngine):
             )
 
         if to_table is None and engine is None:
-             # Depending on use case, might default to MergeTree or fail.
-             # For now, let's allow it but DDL generation might fail or use default if handled there.
-             # But strictly, one should be present.
-             pass
+            # Depending on use case, might default to MergeTree or fail.
+            # For now, let's allow it but DDL generation might fail or use default if handled there.
+            # But strictly, one should be present.
+            pass
 
         self.to_table = to_table
         self.inner_engine = engine
         self.populate = populate
-        
-        # Initialize base with to_table if present, so it's stored in _args if needed, 
+
+        # Initialize base with to_table if present, so it's stored in _args if needed,
         # but we ignore it for formatting mostly.
         if to_table:
             super().__init__(to_table, *args, **kwargs)
@@ -354,24 +350,24 @@ class MaterializedView(TableEngine):
             super().__init__(*args, **kwargs)
 
 
-
 class Distributed(TableEngine):
     """Distributed table engine for distributed queries across cluster.
-    
+
     Syntax: Distributed(cluster, database, table[, sharding_key[, policy_name]])
-    
+
     Args:
         cluster: Cluster name (required)
         database: Remote database name (required)
         table: Remote table name (required)
         sharding_key: Sharding key expression (optional)
         policy_name: Sharding policy name (optional)
-    
+
     Example:
         Distributed(cluster="my_cluster", database="default", table="users")
-        Distributed(cluster="my_cluster", database="default", table="users", 
+        Distributed(cluster="my_cluster", database="default", table="users",
                    sharding_key="rand()")
     """
+
     engine_name = "Distributed"
     arg_names = ("cluster", "database", "table", "sharding_key", "policy_name")
     required_args = ("cluster", "database", "table")
@@ -443,14 +439,15 @@ ENGINE_CLASSES: Dict[str, Type[TableEngine]] = {
 
 
 __all__ = [
+    "ENGINE_CLASSES",
+    "JDBC",
+    "ODBC",
     "AggregatingMergeTree",
     "CollapsingMergeTree",
     "Distributed",
     "EngineConfigurationError",
-    "ENGINE_CLASSES",
     "File",
     "GraphiteMergeTree",
-    "JDBC",
     "Join",
     "Kafka",
     "Log",
@@ -459,8 +456,8 @@ __all__ = [
     "MergeTree",
     "MySQL",
     "Null",
-    "ODBC",
     "PostgreSQL",
+    "ReplacingMergeTree",
     "ReplicatedAggregatingMergeTree",
     "ReplicatedCollapsingMergeTree",
     "ReplicatedGraphiteMergeTree",
@@ -468,7 +465,6 @@ __all__ = [
     "ReplicatedReplacingMergeTree",
     "ReplicatedSummingMergeTree",
     "ReplicatedVersionedCollapsingMergeTree",
-    "ReplacingMergeTree",
     "Set",
     "StripeLog",
     "SummingMergeTree",

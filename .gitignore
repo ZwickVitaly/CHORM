@@ -5,10 +5,10 @@ __pycache__/
 dist/
 build/
 .pytest_cache/
+.ruff_cache/
 
 # Environment
 .env
-.env.example
 .venv/
 venv/
 

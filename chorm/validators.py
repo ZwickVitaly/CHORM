@@ -6,10 +6,9 @@ Provides validators for column values, ensuring data integrity before database o
 from __future__ import annotations
 
 import re
-from typing import Any, Callable, List, Optional, Sequence, Type
+from typing import Any, Callable, Sequence
 
 from chorm.exceptions import ValidationError
-
 
 # ============================================================================
 # Base Validator
@@ -81,8 +80,8 @@ class RangeValidator(Validator):
 
         try:
             num_value = float(value)
-        except (ValueError, TypeError):
-            raise ValidationError(f"Value {value!r} is not numeric", column_name, value)
+        except (ValueError, TypeError) as exc:
+            raise ValidationError(f"Value {value!r} is not numeric", column_name, value) from exc
 
         if self.min_value is not None and num_value < self.min_value:
             raise ValidationError(f"Value {value!r} is less than minimum {self.min_value}", column_name, value)
@@ -400,16 +399,16 @@ def validate_value(value: Any, validators: Sequence[Validator], column_name: str
 # ============================================================================
 
 __all__ = [
-    # Base
-    "Validator",
-    # Standard validators
-    "RangeValidator",
-    "LengthValidator",
-    "RegexValidator",
+    "CustomValidator",
     "EmailValidator",
     "InValidator",
+    "LengthValidator",
     "NotInValidator",
-    "CustomValidator",
+    # Standard validators
+    "RangeValidator",
+    "RegexValidator",
+    # Base
+    "Validator",
     # Utilities
     "validate_value",
 ]

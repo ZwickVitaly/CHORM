@@ -1,7 +1,6 @@
 """Tests for Set Operations (UNION, INTERSECT, EXCEPT)."""
 
 from chorm import select
-from chorm.sql.expression import Identifier, Literal
 
 
 def test_union():

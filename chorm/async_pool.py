@@ -5,12 +5,14 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from typing import Any, Dict, Optional
+from typing import TYPE_CHECKING, Any, Dict, Optional
 
 import clickhouse_connect
 
 from chorm.async_engine import AsyncConnection
-from chorm.engine import EngineConfig
+
+if TYPE_CHECKING:
+    from chorm.engine import EngineConfig
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +36,7 @@ class AsyncConnectionPool:
 
     Example:
         >>> from chorm import EngineConfig
-        >>> config = EngineConfig(host='localhost', port=8123)
+        >>> config = EngineConfig(host="localhost", port=8123)
         >>> pool = AsyncConnectionPool(config, pool_size=10)
         >>> await pool.initialize()
         >>> conn = await pool.get()
@@ -98,9 +100,20 @@ class AsyncConnectionPool:
             if self._initialized:
                 return
 
-            for _ in range(self._pool_size):
-                conn = await self._create_connection()
-                await self._pool.put(conn)
+            created_conns = []
+            try:
+                for _ in range(self._pool_size):
+                    conn = await self._create_connection()
+                    created_conns.append(conn)
+            except BaseException:
+                # Clean up any successfully created connections on failure
+                for conn in created_conns:
+                    await self._close_connection_safe(conn)
+                    self._created_at.pop(id(conn), None)
+                raise
+
+            for conn in created_conns:
+                self._pool.put_nowait(conn)
 
             self._initialized = True
 
@@ -217,11 +230,11 @@ class AsyncConnectionPool:
                 conn = await self._safe_recycle_or_validate(conn)
 
                 return conn
-            except asyncio.TimeoutError:
+            except TimeoutError as exc:
                 # Pool exhausted and timeout exceeded
                 raise RuntimeError(
-                    f"Connection pool exhausted (pool_size={self._pool_size}, " f"max_overflow={self._max_overflow})"
-                )
+                    f"Connection pool exhausted (pool_size={self._pool_size}, max_overflow={self._max_overflow})"
+                ) from exc
 
     async def return_connection(self, conn: AsyncConnection) -> None:
         """Return a connection to the pool.
@@ -253,10 +266,7 @@ class AsyncConnectionPool:
                         await self._close_connection_safe(new_conn)
                 except BaseException:
                     # Cannot replace — pool loses a slot, but at least no leak
-                    logger.warning(
-                        "Failed to replace closed pooled connection; "
-                        "pool capacity temporarily reduced"
-                    )
+                    logger.warning("Failed to replace closed pooled connection; pool capacity temporarily reduced")
 
             # Clean up creation time tracking
             self._created_at.pop(conn_id, None)
@@ -296,9 +306,7 @@ class AsyncConnectionPool:
             A valid (or best-effort) AsyncConnection
         """
         needs_replace = False
-        if self._should_recycle(conn):
-            needs_replace = True
-        elif self._pre_ping and not await self._validate_connection(conn):
+        if self._should_recycle(conn) or (self._pre_ping and not await self._validate_connection(conn)):
             needs_replace = True
 
         if not needs_replace:
@@ -311,8 +319,7 @@ class AsyncConnectionPool:
             # Cannot create replacement — return old connection
             # (stale is better than losing a pool slot entirely)
             logger.warning(
-                "Failed to create replacement connection during recycle/validate; "
-                "reusing existing connection"
+                "Failed to create replacement connection during recycle/validate; reusing existing connection"
             )
             return conn
 

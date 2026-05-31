@@ -12,11 +12,11 @@ It covers real-world scenarios like:
 
 import os
 from datetime import date, timedelta
-from chorm import Table, Column, MergeTree, select, insert, create_engine, MetaData
-from chorm.session import Session
-from chorm.types import UInt64, String, Date, Float64, DateTime
-from chorm.sql.expression import Identifier, Literal, func
 
+from chorm import Column, MergeTree, MetaData, Table, create_engine, select
+from chorm.session import Session
+from chorm.sql.expression import Identifier, Literal, func
+from chorm.types import DateTime, Float64, String, UInt64
 
 metadata = MetaData()
 
@@ -28,7 +28,7 @@ class UserEvent(Table):
     __tablename__ = "events_cookbook"
     __engine__ = MergeTree()
     __order_by__ = ("event_type", "timestamp")
-    
+
     user_id = Column(UInt64())
     event_type = Column(String())  # 'signup', 'view_item', 'add_to_cart', 'purchase'
     timestamp = Column(DateTime())
@@ -41,7 +41,7 @@ def get_session():
     host = os.getenv("CLICKHOUSE_HOST", "localhost")
     port = int(os.getenv("CLICKHOUSE_PORT", "8123"))
     database = os.getenv("CLICKHOUSE_DB", "default")
-    
+
     engine = create_engine(
         host=host,
         port=port,
@@ -56,24 +56,24 @@ def setup_data(session):
     # Using metadata to create table
     metadata.drop_all(session.engine)
     metadata.create_all(session.engine)
-    
+
     # Generate some dummy data
     # Cohort 1: Jan 1st
     # Cohort 2: Jan 2nd
-    
+
     events = []
     base_date = date(2024, 1, 1)
-    
+
     # User 1: Full funnel, Cohort Jan 1
     events.append(UserEvent(user_id=1, event_type="signup", timestamp=base_date, amount=0))
     events.append(UserEvent(user_id=1, event_type="view_item", timestamp=base_date, amount=0))
     events.append(UserEvent(user_id=1, event_type="add_to_cart", timestamp=base_date, amount=0))
     events.append(UserEvent(user_id=1, event_type="purchase", timestamp=base_date, amount=100))
-    
+
     # User 2: Drop off after view, Cohort Jan 1
     events.append(UserEvent(user_id=2, event_type="signup", timestamp=base_date, amount=0))
     events.append(UserEvent(user_id=2, event_type="view_item", timestamp=base_date, amount=0))
-    
+
     # User 3: Full funnel, Cohort Jan 2
     next_day = base_date + timedelta(days=1)
     events.append(UserEvent(user_id=3, event_type="signup", timestamp=next_day, amount=0))
@@ -98,11 +98,11 @@ def recipe_funnel_analysis(session):
     Calculates conversion rates between steps.
     """
     print("\n--- Recipe: Funnel Analysis ---")
-    
+
     # We use conditional aggregation (countIf) to calculate steps
-    # In a real scenario, we might use window functions to ensure order, 
+    # In a real scenario, we might use window functions to ensure order,
     # but for simple funnels, existence of event is often enough.
-    
+
     stmt = (
         select(
             func.countIf(UserEvent.event_type == "signup").label("step1_signup"),
@@ -112,10 +112,10 @@ def recipe_funnel_analysis(session):
         )
         .select_from(UserEvent)
     )
-    
+
     print(f"SQL: {stmt.to_sql()}")
     result = session.execute(stmt).one()
-    
+
     print(f"Signups:   {result.step1_signup}")
     print(f"Views:     {result.step2_view} (Conv: {result.step2_view / result.step1_signup:.1%})")
     print(f"Carts:     {result.step3_cart} (Conv: {result.step3_cart / result.step2_view:.1%})")
@@ -127,7 +127,7 @@ def recipe_cohort_retention(session):
     Cohort Analysis: Retention by signup date.
     """
     print("\n--- Recipe: Cohort Retention ---")
-    
+
     # 1. Define cohorts: First signup date per user
     cohorts = (
         select(
@@ -138,13 +138,13 @@ def recipe_cohort_retention(session):
         .group_by(UserEvent.user_id)
         .cte("cohorts")
     )
-    
+
     # 2. Join events with cohorts and calculate retention
     # We want to count unique users active on subsequent days
-    
+
     # Note: We need to join the CTE. Currently CHORM supports CTEs in WITH clause.
     # We'll select from the CTE and join back to events.
-    
+
     stmt = (
         select(
             Identifier("cohorts.cohort_date"),
@@ -157,10 +157,10 @@ def recipe_cohort_retention(session):
         .group_by(Identifier("cohorts.cohort_date"), Identifier("days_since_signup"))
         .order_by(Identifier("cohorts.cohort_date"), Identifier("days_since_signup"))
     )
-    
+
     print(f"SQL: {stmt.to_sql()}")
     results = session.execute(stmt).all()
-    
+
     print("Cohort Date | Day | Active Users")
     print("-" * 35)
     for row in results:
@@ -173,7 +173,7 @@ def recipe_top_n_with_other(session):
     This is a common visualization pattern.
     """
     print("\n--- Recipe: Top-N with 'Other' ---")
-    
+
     # 1. Get Top N categories
     from chorm.sql.expression import Subquery
     top_n = (
@@ -183,18 +183,18 @@ def recipe_top_n_with_other(session):
         .order_by(func.count().desc())
         .limit(2)
     )
-    
+
     # 2. Main query using the subquery
     # If event_type is in top_n, keep it, else 'Other'
     from chorm.sql.expression import if_
-    
+
     event_type_col = UserEvent.event_type
     category_expr = if_(
         event_type_col.in_(Subquery(top_n)),
         event_type_col,
         Literal("Other")
     ).label("category")
-    
+
     stmt = (
         select(
             category_expr,
@@ -204,23 +204,27 @@ def recipe_top_n_with_other(session):
         .group_by(Identifier("category"))
         .order_by(func.count().desc())
     )
-    
+
     print(f"SQL: {stmt.to_sql()}")
     results = session.execute(stmt).all()
-    
+
     for row in results:
         print(f"{row.category}: {row.count}")
 
 
 def main():
-    session = get_session()
     try:
-        setup_data(session)
-        recipe_funnel_analysis(session)
-        recipe_cohort_retention(session)
-        recipe_top_n_with_other(session)
-    finally:
-        session.execute(f"DROP TABLE IF EXISTS {UserEvent.__tablename__}")
+        session = get_session()
+        try:
+            setup_data(session)
+            recipe_funnel_analysis(session)
+            recipe_cohort_retention(session)
+            recipe_top_n_with_other(session)
+        finally:
+            session.execute(f"DROP TABLE IF EXISTS {UserEvent.__tablename__}")
+    except Exception as e:
+        print(f"Skipping demo (ClickHouse connection failed): {e}")
+        print("Note: This demo requires a running ClickHouse instance.")
 
 
 if __name__ == "__main__":

@@ -8,8 +8,8 @@ import pytest
 from chorm.metrics import (
     MetricsCollector,
     QueryMetrics,
-    enable_global_metrics,
     disable_global_metrics,
+    enable_global_metrics,
     get_global_collector,
 )
 

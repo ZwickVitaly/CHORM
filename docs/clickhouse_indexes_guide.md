@@ -33,16 +33,20 @@ Example:
 # INDEX TYPES
 # =============================================================================
 
-from chorm import Table, Column, add_index
+from chorm import Table, Column, add_index, create_engine, Session
 from chorm.types import UInt64, String, DateTime
 from chorm.table_engines import MergeTree
 from chorm.sql.expression import Identifier
+
+# Initialize connection
+engine = create_engine("clickhouse://localhost:8123/default")
+session = Session(engine)
 
 class User(Table):
     __tablename__ = "users"
     __engine__ = MergeTree()
     __order_by__ = ["id"]
-    
+
     id = Column(UInt64())
     email = Column(String())
     name = Column(String())
@@ -63,7 +67,7 @@ Granularity recommendation: 1-2 (needs precision for ranges)
 """
 
 # Good for timestamp ranges
-add_index(User, "idx_created", Identifier("created_at"), 
+add_index(User, "idx_created", Identifier("created_at"),
           index_type="minmax", granularity=1)
 
 # Query benefits:
@@ -84,11 +88,11 @@ Granularity recommendation: 2-4 (can be less precise)
 """
 
 # Set index with max 100 unique values per block
-add_index(User, "idx_country", Identifier("country"), 
+add_index(User, "idx_country", Identifier("country"),
           index_type="set(100)", granularity=4)
 
 # Set index with unlimited unique values
-add_index(User, "idx_status", Identifier("status"), 
+add_index(User, "idx_status", Identifier("status"),
           index_type="set(0)", granularity=2)
 
 # Query benefits:
@@ -109,11 +113,11 @@ Granularity recommendation: 1 (needs precision for equality)
 """
 
 # Default bloom filter (2.5% false positive rate)
-add_index(User, "idx_email", Identifier("email"), 
+add_index(User, "idx_email", Identifier("email"),
           index_type="bloom_filter", granularity=1)
 
 # Custom false positive rate (1% = more precise, larger index)
-add_index(User, "idx_email_precise", Identifier("email"), 
+add_index(User, "idx_email_precise", Identifier("email"),
           index_type="bloom_filter(0.01)", granularity=1)
 
 # Query benefits:
@@ -137,11 +141,11 @@ Granularity recommendation: 1-2 (text search needs precision)
 """
 
 # Token bloom filter for name search
-add_index(User, "idx_name_tokens", Identifier("name"), 
+add_index(User, "idx_name_tokens", Identifier("name"),
           index_type="tokenbf_v1(256, 3, 0)", granularity=1)
 
 # Larger filter for better precision
-add_index(User, "idx_desc_tokens", Identifier("description"), 
+add_index(User, "idx_desc_tokens", Identifier("description"),
           index_type="tokenbf_v1(512, 4, 0)", granularity=2)
 
 # Query benefits:
@@ -166,11 +170,11 @@ Granularity recommendation: 2-4 (can be less precise, expensive index)
 """
 
 # 4-gram bloom filter for substring search
-add_index(User, "idx_desc_ngrams", Identifier("description"), 
+add_index(User, "idx_desc_ngrams", Identifier("description"),
           index_type="ngrambf_v1(4, 512, 3, 0)", granularity=2)
 
 # 3-gram for shorter substrings (more matches, less precise)
-add_index(User, "idx_name_ngrams", Identifier("name"), 
+add_index(User, "idx_name_ngrams", Identifier("name"),
           index_type="ngrambf_v1(3, 256, 3, 0)", granularity=1)
 
 # Query benefits:
@@ -240,7 +244,7 @@ class Events(Table):
     __engine__ = MergeTree()
     __order_by__ = ["user_id", "timestamp"]
     __partition_by__ = "toYYYYMM(timestamp)"
-    
+
     user_id = Column(UInt64())
     event_type = Column(String())
     timestamp = Column(DateTime())
@@ -251,21 +255,21 @@ class Events(Table):
 session.execute(Events.create_table())
 
 # Timestamp range queries (precise)
-session.execute(add_index(Events, "idx_timestamp", Identifier("timestamp"), 
+session.execute(add_index(Events, "idx_timestamp", Identifier("timestamp"),
                          "minmax", granularity=1).to_sql())
 
 # Event type equality (medium cardinality)
-session.execute(add_index(Events, "idx_event_type", Identifier("event_type"), 
+session.execute(add_index(Events, "idx_event_type", Identifier("event_type"),
                          "set(50)", granularity=2).to_sql())
 
 # Country equality (low cardinality)
-session.execute(add_index(Events, "idx_country", Identifier("country"), 
+session.execute(add_index(Events, "idx_country", Identifier("country"),
                          "set(200)", granularity=4).to_sql())
 
 # Message text search (expensive, less precise OK)
-session.execute(add_index(Events, "idx_message_tokens", Identifier("message"), 
+session.execute(add_index(Events, "idx_message_tokens", Identifier("message"),
                          "tokenbf_v1(512, 3, 0)", granularity=2).to_sql())
 
 # Message substring search (very expensive, higher granularity)
-session.execute(add_index(Events, "idx_message_ngrams", Identifier("message"), 
+session.execute(add_index(Events, "idx_message_ngrams", Identifier("message"),
                          "ngrambf_v1(4, 1024, 3, 0)", granularity=4).to_sql())

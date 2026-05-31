@@ -2,17 +2,16 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Sequence, Union
+import re
+from typing import Any, Dict, List, Optional
 
 from chorm.sql.expression import Expression, _coerce
-import re
-
-
 from chorm.utils import escape_string
+
 
 def _escape_string(value: str) -> str:
     """Escape string value for SQL literal.
-    
+
     DEPRECATED: Use chorm.utils.escape_string instead.
     """
     return escape_string(value)
@@ -20,7 +19,7 @@ def _escape_string(value: str) -> str:
 
 def _get_qualified_name(obj: Any) -> str:
     """Get fully qualified table name from object.
-    
+
     Returns database.table if configured, otherwise just table name.
     """
     if hasattr(obj, "__table__") and hasattr(obj.__table__, "qualified_name"):
@@ -90,7 +89,9 @@ class Insert(Expression):
                 sql += f" ({columns_str})"
 
             query_sql = (
-                self._select_query.to_sql(compiler) if hasattr(self._select_query, "to_sql") else str(self._select_query)
+                self._select_query.to_sql(compiler)
+                if hasattr(self._select_query, "to_sql")
+                else str(self._select_query)
             )
             sql += f" {query_sql}"
 
@@ -121,7 +122,7 @@ class Insert(Expression):
                 val = row.get(k)
                 # Basic escaping or Parameterization
                 if compiler is not None:
-                     row_vals.append(compiler.add_param(val))
+                    row_vals.append(compiler.add_param(val))
                 elif isinstance(val, str):
                     row_vals.append(f"'{_escape_string(val)}'")
                 elif val is None:
@@ -142,7 +143,6 @@ class Insert(Expression):
                     val_str = f"'{_escape_string(v)}'"
                 settings_list.append(f"{k}={val_str}")
             sql += f" SETTINGS {', '.join(settings_list)}"
-
 
         return sql
 
@@ -188,7 +188,9 @@ class Update(Expression):
         if self._where_criteria:
             # ClickHouse ALTER TABLE UPDATE doesn't support table-qualified column names
             # Strip table prefix from WHERE clause
-            criteria = " AND ".join(self._strip_table_prefix(c.to_sql(compiler), table_name) for c in self._where_criteria)
+            criteria = " AND ".join(
+                self._strip_table_prefix(c.to_sql(compiler), table_name) for c in self._where_criteria
+            )
             sql += f" WHERE {criteria}"
         else:
             # ClickHouse requires WHERE for mutations usually, but we won't enforce it here strictly
@@ -204,19 +206,19 @@ class Update(Expression):
             sql += f" SETTINGS {', '.join(settings_list)}"
 
         return sql
-    
+
     @staticmethod
     def _strip_table_prefix(sql: str, table_name: str) -> str:
         """Strip table prefix from column references in SQL.
-        
+
         ClickHouse ALTER TABLE UPDATE/DELETE don't support table-qualified column names.
         Converts 'table.column' to 'column' in WHERE clauses.
         """
 
         # Replace table.column with just column
         # Pattern: table_name.column_name (with word boundaries)
-        pattern = rf'\b{re.escape(table_name)}\.(\w+)\b'
-        return re.sub(pattern, r'\1', sql)
+        pattern = rf"\b{re.escape(table_name)}\.(\w+)\b"
+        return re.sub(pattern, r"\1", sql)
 
 
 class Delete(Expression):
@@ -247,7 +249,9 @@ class Delete(Expression):
         if self._where_criteria:
             # ClickHouse ALTER TABLE DELETE doesn't support table-qualified column names
             # Strip table prefix from WHERE clause (reuse Update's method)
-            criteria = " AND ".join(Update._strip_table_prefix(c.to_sql(compiler), table_name) for c in self._where_criteria)
+            criteria = " AND ".join(
+                Update._strip_table_prefix(c.to_sql(compiler), table_name) for c in self._where_criteria
+            )
             sql += f" WHERE {criteria}"
 
         if self._settings:

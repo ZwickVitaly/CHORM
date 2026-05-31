@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import time
-from typing import Any, Dict
+from typing import TYPE_CHECKING, Any, Dict
 
-from chorm.async_engine import AsyncEngine
-from chorm.engine import Engine
+if TYPE_CHECKING:
+    from chorm.async_engine import AsyncEngine
+    from chorm.engine import Engine
 
 
 class HealthCheck:
@@ -67,7 +68,7 @@ class HealthCheck:
         Example:
             >>> health = HealthCheck(engine)
             >>> status = health.get_status()
-            >>> if status['status'] == 'healthy':
+            >>> if status["status"] == "healthy":
             ...     print(f"Version: {status['version']}")
             ...     print(f"Latency: {status['latency_ms']}ms")
         """
@@ -141,7 +142,7 @@ class HealthCheck:
                 try:
                     result = conn.query(
                         """
-                        SELECT 
+                        SELECT
                             formatReadableSize(total_memory) as total,
                             formatReadableSize(memory_usage) as used
                         FROM system.asynchronous_metrics
@@ -220,7 +221,7 @@ class AsyncHealthCheck:
         Example:
             >>> health = AsyncHealthCheck(engine)
             >>> status = await health.get_status()
-            >>> if status['status'] == 'healthy':
+            >>> if status["status"] == "healthy":
             ...     print(f"Version: {status['version']}")
             ...     print(f"Latency: {status['latency_ms']}ms")
         """
@@ -294,7 +295,7 @@ class AsyncHealthCheck:
                 try:
                     result = await conn.query(
                         """
-                        SELECT 
+                        SELECT
                             formatReadableSize(total_memory) as total,
                             formatReadableSize(memory_usage) as used
                         FROM system.asynchronous_metrics
@@ -317,6 +318,6 @@ class AsyncHealthCheck:
 
 # Public API
 __all__ = [
-    "HealthCheck",
     "AsyncHealthCheck",
+    "HealthCheck",
 ]

@@ -1,9 +1,8 @@
 """Tests for TTL support in table engines."""
 
-import pytest
+from chorm import Column, Table
 from chorm.table_engines import MergeTree, ReplacingMergeTree
 from chorm.types import Date, UInt64
-from chorm import Table, Column
 
 
 def test_mergetree_simple_ttl():

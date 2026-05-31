@@ -6,9 +6,8 @@ from unittest.mock import MagicMock
 # Mock clickhouse_connect to avoid installation requirement for SQL generation testing
 sys.modules["clickhouse_connect"] = MagicMock()
 
-import pytest
-from chorm import Table, Column, MergeTree, select
-from chorm.types import UInt64, String
+from chorm import Column, MergeTree, Table, select
+from chorm.types import String, UInt64
 
 
 class User(Table):

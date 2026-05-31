@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Generic, List, Optional, Type, TypeVar, Union
 
-from chorm.exceptions import NoResultFound, MultipleResultsFound
+from chorm.exceptions import MultipleResultsFound, NoResultFound
 
 T = TypeVar("T")
 
@@ -22,7 +22,7 @@ class Row:
     def __init__(self, data: tuple, columns: list) -> None:
         self._data = data
         self._columns = columns
-        self._mapping = dict(zip(columns, data))
+        self._mapping = dict(zip(columns, data, strict=False))
 
     def __getattr__(self, name: str) -> Any:
         """Attribute access: row.column_name"""
@@ -84,7 +84,7 @@ class Result(Generic[T]):
             # Map rows to model instances
             instances = []
             for row in self._rows:
-                row_dict = dict(zip(self._columns, row))
+                row_dict = dict(zip(self._columns, row, strict=False))
                 instances.append(self._model(**row_dict))
             return instances
 
@@ -122,7 +122,7 @@ class Result(Generic[T]):
         if len(rows) == 1:
             return rows[0]
         if not rows:
-            raise NoResultFound("Query returned no results. " "Use .first() or .one_or_none() if this is expected.")
+            raise NoResultFound("Query returned no results. Use .first() or .one_or_none() if this is expected.")
         raise MultipleResultsFound(
             f"Query returned {len(rows)} results, expected 1. "
             f"Use .first() to get the first result or add .limit(1) to your query."
@@ -140,7 +140,6 @@ class Result(Generic[T]):
             f"Use .first() to get the first result or add .limit(1) to your query."
         )
 
-
     def __iter__(self):
         """Yield rows lazily.
 
@@ -149,7 +148,7 @@ class Result(Generic[T]):
         """
         if self._model:
             for row in self._rows:
-                row_dict = dict(zip(self._columns, row))
+                row_dict = dict(zip(self._columns, row, strict=False))
                 yield self._model(**row_dict)
         else:
             for row in self._rows:
@@ -166,21 +165,20 @@ class ScalarResult(Generic[T]):
     def __iter__(self):
         """Yield scalar values lazily."""
         if self._result._model:
-            # If using model, iterating gives model instances, but ScalarResult specifically 
-            # implies extracting a column. However, scalar() on a model query usually 
+            # If using model, iterating gives model instances, but ScalarResult specifically
+            # implies extracting a column. However, scalar() on a model query usually
             # returns the model instance if it's the only thing selected.
             # But the original all() implementation returns model instances if model is set.
             # Let's align with all().
-            for item in self._result:
-                yield item
+            yield from self._result
             return
 
         # Get column index
         if isinstance(self._column, str):
             try:
                 col_idx = self._result._columns.index(self._column)
-            except ValueError:
-                raise ValueError(f"Column '{self._column}' not found in result")
+            except ValueError as exc:
+                raise ValueError(f"Column '{self._column}' not found in result") from exc
         else:
             col_idx = self._column
 
@@ -196,20 +194,20 @@ class ScalarResult(Generic[T]):
         # Optimized to avoid creating full iterator
         if not self._result._rows:
             return None
-            
+
         if self._result._model:
             # Use Result.first() logic
             return self._result.first()
-            
+
         # Get column index
         if isinstance(self._column, str):
             try:
                 col_idx = self._result._columns.index(self._column)
-            except ValueError:
-                raise ValueError(f"Column '{self._column}' not found in result")
+            except ValueError as exc:
+                raise ValueError(f"Column '{self._column}' not found in result") from exc
         else:
             col_idx = self._column
-            
+
         return self._result._rows[0][col_idx]
 
     def one(self) -> Any:
@@ -218,11 +216,9 @@ class ScalarResult(Generic[T]):
         if len(rows) == 1:
             return self.first()
         if not rows:
-            raise NoResultFound(
-                "Query returned no results. " "Use .first() or .scalar_one_or_none() if this is expected."
-            )
+            raise NoResultFound("Query returned no results. Use .first() or .scalar_one_or_none() if this is expected.")
         raise MultipleResultsFound(
-            f"Query returned {len(rows)} results, expected 1. " f"Use .first() or add .limit(1) to your query."
+            f"Query returned {len(rows)} results, expected 1. Use .first() or add .limit(1) to your query."
         )
 
     def one_or_none(self) -> Optional[Any]:
@@ -233,7 +229,7 @@ class ScalarResult(Generic[T]):
         if not rows:
             return None
         raise MultipleResultsFound(
-            f"Query returned {len(rows)} results, expected 0 or 1. " f"Use .first() or add .limit(1) to your query."
+            f"Query returned {len(rows)} results, expected 0 or 1. Use .first() or add .limit(1) to your query."
         )
 
     def scalar(self) -> Optional[Any]:
@@ -258,7 +254,7 @@ class MappingResult:
     def __iter__(self):
         """Yield rows as dicts lazily."""
         for row in self._result._rows:
-            yield dict(zip(self._result._columns, row))
+            yield dict(zip(self._result._columns, row, strict=False))
 
     def all(self) -> List[dict]:
         """Return all rows as dicts."""
@@ -268,7 +264,7 @@ class MappingResult:
         """Return first row as dict or None."""
         if not self._result._rows:
             return None
-        return dict(zip(self._result._columns, self._result._rows[0]))
+        return dict(zip(self._result._columns, self._result._rows[0], strict=False))
 
     def one(self) -> dict:
         """Return exactly one row as dict."""
@@ -276,9 +272,9 @@ class MappingResult:
         if len(rows) == 1:
             return self.first()
         if not rows:
-            raise NoResultFound("Query returned no results. " "Use .first() or .one_or_none() if this is expected.")
+            raise NoResultFound("Query returned no results. Use .first() or .one_or_none() if this is expected.")
         raise MultipleResultsFound(
-            f"Query returned {len(rows)} results, expected 1. " f"Use .first() or add .limit(1) to your query."
+            f"Query returned {len(rows)} results, expected 1. Use .first() or add .limit(1) to your query."
         )
 
     def one_or_none(self) -> Optional[dict]:
@@ -289,7 +285,7 @@ class MappingResult:
         if not rows:
             return None
         raise MultipleResultsFound(
-            f"Query returned {len(rows)} results, expected 0 or 1. " f"Use .first() or add .limit(1) to your query."
+            f"Query returned {len(rows)} results, expected 0 or 1. Use .first() or add .limit(1) to your query."
         )
 
 
@@ -317,9 +313,9 @@ class TupleResult:
         if len(rows) == 1:
             return rows[0]
         if not rows:
-            raise NoResultFound("Query returned no results. " "Use .first() or .one_or_none() if this is expected.")
+            raise NoResultFound("Query returned no results. Use .first() or .one_or_none() if this is expected.")
         raise MultipleResultsFound(
-            f"Query returned {len(rows)} results, expected 1. " f"Use .first() or add .limit(1) to your query."
+            f"Query returned {len(rows)} results, expected 1. Use .first() or add .limit(1) to your query."
         )
 
     def one_or_none(self) -> Optional[tuple]:
@@ -330,5 +326,304 @@ class TupleResult:
         if not rows:
             return None
         raise MultipleResultsFound(
-            f"Query returned {len(rows)} results, expected 0 or 1. " f"Use .first() or add .limit(1) to your query."
+            f"Query returned {len(rows)} results, expected 0 or 1. Use .first() or add .limit(1) to your query."
         )
+
+
+class _StreamResultMethodsMixin:
+    """Provides common list retrieval methods for synchronous streams."""
+
+    def all(self) -> List[Any]:
+        """Return all rows as a list, fully consuming the stream."""
+        return list(self)
+
+    def first(self) -> Optional[Any]:
+        """Return the first row of the stream or None, closing the stream."""
+        for row in self:
+            return row
+        return None
+
+    def one(self) -> Any:
+        """Return exactly one row, raising an exception if not found or multiple found."""
+        iterator = iter(self)
+        try:
+            first = next(iterator)
+        except StopIteration as exc:
+            raise NoResultFound(
+                "Query returned no results. Use .first() or .one_or_none() if this is expected."
+            ) from exc
+
+        try:
+            next(iterator)
+        except StopIteration:
+            return first
+        raise MultipleResultsFound(
+            "Query returned multiple results, expected 1. Use .first() or add .limit(1) to your query."
+        )
+
+    def one_or_none(self) -> Optional[Any]:
+        """Return one row or None, raising an exception if multiple found."""
+        iterator = iter(self)
+        try:
+            first = next(iterator)
+        except StopIteration:
+            return None
+
+        try:
+            next(iterator)
+        except StopIteration:
+            return first
+        raise MultipleResultsFound(
+            "Query returned multiple results, expected 0 or 1. Use .first() or add .limit(1) to your query."
+        )
+
+
+class _AsyncStreamResultMethodsMixin:
+    """Provides common list retrieval methods for asynchronous streams."""
+
+    async def all(self) -> List[Any]:
+        """Return all rows as a list, fully consuming the stream."""
+        results = []
+        async for row in self:
+            results.append(row)
+        return results
+
+    async def first(self) -> Optional[Any]:
+        """Return the first row of the stream or None, closing the stream."""
+        async for row in self:
+            return row
+        return None
+
+    async def one(self) -> Any:
+        """Return exactly one row, raising an exception if not found or multiple found."""
+        iterator = self.__aiter__()
+        try:
+            first = await iterator.__anext__()
+        except StopAsyncIteration as exc:
+            raise NoResultFound(
+                "Query returned no results. Use .first() or .one_or_none() if this is expected."
+            ) from exc
+
+        try:
+            await iterator.__anext__()
+        except StopAsyncIteration:
+            return first
+        raise MultipleResultsFound(
+            "Query returned multiple results, expected 1. Use .first() or add .limit(1) to your query."
+        )
+
+    async def one_or_none(self) -> Optional[Any]:
+        """Return one row or None, raising an exception if multiple found."""
+        iterator = self.__aiter__()
+        try:
+            first = await iterator.__anext__()
+        except StopAsyncIteration:
+            return None
+
+        try:
+            await iterator.__anext__()
+        except StopAsyncIteration:
+            return first
+        raise MultipleResultsFound(
+            "Query returned multiple results, expected 0 or 1. Use .first() or add .limit(1) to your query."
+        )
+
+
+class StreamResult(_StreamResultMethodsMixin, Generic[T]):
+    """Wraps a ClickHouse streaming query result.
+
+    Maintains open database connection context during streaming execution.
+    """
+
+    def __init__(self, stream_context: Any, conn_ctx: Any, model: Optional[Type[T]] = None) -> None:
+        self._stream_context = stream_context
+        self._conn_ctx = conn_ctx
+        self._model = model
+        self._columns = list(stream_context.source.column_names)
+
+    def __enter__(self) -> StreamResult[T]:
+        self._stream_context.__enter__()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        try:
+            self._stream_context.__exit__(exc_type, exc_val, exc_tb)
+        finally:
+            self._conn_ctx.__exit__(exc_type, exc_val, exc_tb)
+
+    def __iter__(self):
+        """Yield rows lazily block-by-block, avoiding materializing the full list."""
+        if self._model:
+            for block in self._stream_context:
+                for row in block:
+                    row_dict = dict(zip(self._columns, row, strict=False))
+                    yield self._model(**row_dict)
+        else:
+            for block in self._stream_context:
+                for row in block:
+                    yield Row(row, self._columns)
+
+    def scalars(self, column: Union[int, str] = 0) -> ScalarStreamResult[T]:
+        """Return a ScalarStreamResult for the specified column."""
+        return ScalarStreamResult(self, column)
+
+    def mappings(self) -> MappingStreamResult:
+        """Return streaming results as dicts."""
+        return MappingStreamResult(self)
+
+    def tuples(self) -> TupleStreamResult:
+        """Return streaming results as raw tuples."""
+        return TupleStreamResult(self)
+
+
+class ScalarStreamResult(_StreamResultMethodsMixin, Generic[T]):
+    """Stream result wrapper for scalar values."""
+
+    def __init__(self, result: StreamResult[T], column: Union[int, str] = 0) -> None:
+        self._result = result
+        self._column = column
+
+    def __iter__(self):
+        """Yield scalar values lazily."""
+        if self._result._model:
+            yield from self._result
+            return
+
+        # Get column index
+        if isinstance(self._column, str):
+            try:
+                col_idx = self._result._columns.index(self._column)
+            except ValueError as exc:
+                raise ValueError(f"Column '{self._column}' not found in result") from exc
+        else:
+            col_idx = self._column
+
+        for block in self._result._stream_context:
+            for row in block:
+                yield row[col_idx]
+
+
+class MappingStreamResult(_StreamResultMethodsMixin):
+    """Stream result that returns dicts."""
+
+    def __init__(self, result: StreamResult) -> None:
+        self._result = result
+
+    def __iter__(self):
+        """Yield rows as dicts lazily."""
+        for block in self._result._stream_context:
+            for row in block:
+                yield dict(zip(self._result._columns, row, strict=False))
+
+
+class TupleStreamResult(_StreamResultMethodsMixin):
+    """Stream result that returns raw tuples."""
+
+    def __init__(self, result: StreamResult) -> None:
+        self._result = result
+
+    def __iter__(self):
+        """Yield rows as tuples lazily."""
+        for block in self._result._stream_context:
+            yield from block
+
+
+class AsyncStreamResult(_AsyncStreamResultMethodsMixin, Generic[T]):
+    """Wraps an asynchronous ClickHouse streaming query result.
+
+    Maintains open database connection context during streaming execution.
+    """
+
+    def __init__(self, stream_context: Any, conn_ctx: Any, model: Optional[Type[T]] = None) -> None:
+        self._stream_context = stream_context
+        self._conn_ctx = conn_ctx
+        self._model = model
+        self._columns = list(stream_context.source.column_names)
+
+    async def __aenter__(self) -> AsyncStreamResult[T]:
+        await self._stream_context.__aenter__()
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
+        try:
+            await self._stream_context.__aexit__(exc_type, exc_val, exc_tb)
+        finally:
+            await self._conn_ctx.__aexit__(exc_type, exc_val, exc_tb)
+
+    async def __aiter__(self):
+        """Yield rows lazily block-by-block, avoiding materializing the full list."""
+        if self._model:
+            async for block in self._stream_context:
+                for row in block:
+                    row_dict = dict(zip(self._columns, row, strict=False))
+                    yield self._model(**row_dict)
+        else:
+            async for block in self._stream_context:
+                for row in block:
+                    yield Row(row, self._columns)
+
+    def scalars(self, column: Union[int, str] = 0) -> AsyncScalarStreamResult[T]:
+        """Return an AsyncScalarStreamResult for the specified column."""
+        return AsyncScalarStreamResult(self, column)
+
+    def mappings(self) -> AsyncMappingStreamResult:
+        """Return streaming results as dicts."""
+        return AsyncMappingStreamResult(self)
+
+    def tuples(self) -> AsyncTupleStreamResult:
+        """Return streaming results as raw tuples."""
+        return AsyncTupleStreamResult(self)
+
+
+class AsyncScalarStreamResult(_AsyncStreamResultMethodsMixin, Generic[T]):
+    """Async stream result wrapper for scalar values."""
+
+    def __init__(self, result: AsyncStreamResult[T], column: Union[int, str] = 0) -> None:
+        self._result = result
+        self._column = column
+
+    async def __aiter__(self):
+        """Yield scalar values lazily."""
+        if self._result._model:
+            async for item in self._result:
+                yield item
+            return
+
+        # Get column index
+        if isinstance(self._column, str):
+            try:
+                col_idx = self._result._columns.index(self._column)
+            except ValueError as exc:
+                raise ValueError(f"Column '{self._column}' not found in result") from exc
+        else:
+            col_idx = self._column
+
+        async for block in self._result._stream_context:
+            for row in block:
+                yield row[col_idx]
+
+
+class AsyncMappingStreamResult(_AsyncStreamResultMethodsMixin):
+    """Async stream result that returns dicts."""
+
+    def __init__(self, result: AsyncStreamResult) -> None:
+        self._result = result
+
+    async def __aiter__(self):
+        """Yield rows as dicts lazily."""
+        async for block in self._result._stream_context:
+            for row in block:
+                yield dict(zip(self._result._columns, row, strict=False))
+
+
+class AsyncTupleStreamResult(_AsyncStreamResultMethodsMixin):
+    """Async stream result that returns raw tuples."""
+
+    def __init__(self, result: AsyncStreamResult) -> None:
+        self._result = result
+
+    async def __aiter__(self):
+        """Yield rows as tuples lazily."""
+        async for block in self._result._stream_context:
+            for row in block:
+                yield row

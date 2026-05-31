@@ -1,29 +1,26 @@
 """Integration tests for ClickHouse-specific functions with real ClickHouse."""
 
 import os
-import pytest
-from chorm import Table, Column, MergeTree, select, insert, create_engine
-from chorm.session import Session
-from chorm.types import UInt64, String, Date, Float64, Array
-from chorm.sql.expression import (
-    func,
-    uniq,
-    median,
-    quantile,
-    group_array,
-    stddev_pop,
-    var_pop,
-    corr,
-    to_start_of_month,
-    date_diff,
-    now,
-    today,
-    concat,
-    substring,
-    position,
-    length,
-)
 
+import pytest
+
+from chorm import Column, MergeTree, Table, create_engine, insert, select
+from chorm.session import Session
+from chorm.sql.expression import (
+    corr,
+    date_diff,
+    func,
+    group_array,
+    length,
+    median,
+    stddev_pop,
+    substring,
+    to_start_of_month,
+    today,
+    uniq,
+    var_pop,
+)
+from chorm.types import Array, Date, Float64, String, UInt64
 
 # Skip integration tests if ClickHouse is not available
 pytestmark = pytest.mark.skipif(

@@ -4,13 +4,10 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass, field
-from typing import Any, Dict, Iterable, Mapping, Sequence, Tuple, TYPE_CHECKING
+from typing import Any, Dict, Iterable, Mapping, Sequence, Tuple
 from urllib.parse import parse_qsl, urlparse
 
 import clickhouse_connect
-
-if TYPE_CHECKING:
-    from chorm._context_managers import _ConnectionContextManager
 
 _TRUE_VALUES = {"1", "true", "t", "yes", "y", "on"}
 _FALSE_VALUES = {"0", "false", "f", "no", "n", "off"}
@@ -106,7 +103,6 @@ class EngineConfig:
     secure: bool = False
     settings: Dict[str, Any] = field(default_factory=dict)
 
-
     # Timeout parameters (following clickhouse-connect defaults)
     connect_timeout: int = 10
     send_receive_timeout: int = 300
@@ -131,7 +127,7 @@ class EngineConfig:
     def with_overrides(self, **overrides: Any) -> "EngineConfig":
         """Return a new config with selected fields replaced."""
         merged_settings = dict(self.settings)
-        if "settings" in overrides and overrides["settings"]:
+        if overrides.get("settings"):
             merged_settings.update(overrides["settings"])
 
         return EngineConfig(
@@ -198,9 +194,9 @@ class EngineConfig:
         d = self.__dict__.copy()
         if d.get("password"):
             d["password"] = "******"
-        
+
         # Format like standard dataclass repr
-        field_strs = [f"{k}={repr(v)}" for k, v in d.items()]
+        field_strs = [f"{k}={v!r}" for k, v in d.items()]
         return f"{self.__class__.__name__}({', '.join(field_strs)})"
 
 
@@ -238,8 +234,6 @@ class Engine:
                 connect_args=self._connect_args,
             )
 
-
-
     @property
     def config(self) -> EngineConfig:
         return self._config
@@ -251,29 +245,26 @@ class Engine:
 
     def compile(self, statement: Any) -> Tuple[str, Dict[str, Any]]:
         """Compile a statement into SQL and parameters.
-        
+
         Args:
             statement: SQL statement (string or selectable object)
-            
+
         Returns:
             Tuple of (sql, parameters)
         """
         from chorm.sql.compiler import Compiler
-        
+
         if hasattr(statement, "to_sql"):
             compiler = Compiler()
-            # If statement has to_sql, use compiler
-            # We need to handle potential legacy to_sql signatures if any user defined them?
-            # But we are updating internal ones.
-            # Python is dynamic, so we can try calling with argument.
+            # If statement has to_sql, compile it supporting both compiler-aware and legacy signatures
             if hasattr(statement.to_sql, "__code__") and statement.to_sql.__code__.co_argcount > 1:
-                 sql = statement.to_sql(compiler)
+                sql = statement.to_sql(compiler)
             else:
-                 # Legacy support or simple string return
-                 sql = statement.to_sql()
-            
+                # Legacy support or simple string return
+                sql = statement.to_sql()
+
             return sql, compiler.params
-            
+
         return str(statement), {}
 
     def connect(self, *, settings: Mapping[str, Any] | None = None, **overrides: Any) -> "Connection":
@@ -338,7 +329,7 @@ class Engine:
         **overrides: Any,
     ) -> Any:
         """Execute a query and return a pandas DataFrame.
-        
+
         Requires pandas to be installed.
         """
         with self.connect(settings=settings, **overrides) as connection:
@@ -528,12 +519,7 @@ def create_engine(
 
     Example:
         >>> # Explicit configuration
-        >>> engine = create_engine(
-        ...     host="localhost",
-        ...     username="default",
-        ...     password="password",
-        ...     send_receive_timeout=60
-        ... )
+        >>> engine = create_engine(host="localhost", username="default", password="password", send_receive_timeout=60)
     """
     config = EngineConfig()
     url_connect_args: Dict[str, Any] = {}
@@ -543,23 +529,40 @@ def create_engine(
 
     # Collect explicit overrides
     overrides: Dict[str, Any] = {}
-    if host is not None: overrides["host"] = host
-    if port is not None: overrides["port"] = port
-    if username is not None: overrides["username"] = username
-    if password is not None: overrides["password"] = password
-    if database is not None: overrides["database"] = database
-    if secure is not None: overrides["secure"] = secure
-    if connect_timeout is not None: overrides["connect_timeout"] = connect_timeout
-    if send_receive_timeout is not None: overrides["send_receive_timeout"] = send_receive_timeout
-    if compress is not None: overrides["compress"] = compress
-    if query_limit is not None: overrides["query_limit"] = query_limit
-    if verify is not None: overrides["verify"] = verify
-    if ca_cert is not None: overrides["ca_cert"] = ca_cert
-    if client_cert is not None: overrides["client_cert"] = client_cert
-    if client_cert_key is not None: overrides["client_cert_key"] = client_cert_key
-    if http_proxy is not None: overrides["http_proxy"] = http_proxy
-    if https_proxy is not None: overrides["https_proxy"] = https_proxy
-    if client_name is not None: overrides["client_name"] = client_name
+    if host is not None:
+        overrides["host"] = host
+    if port is not None:
+        overrides["port"] = port
+    if username is not None:
+        overrides["username"] = username
+    if password is not None:
+        overrides["password"] = password
+    if database is not None:
+        overrides["database"] = database
+    if secure is not None:
+        overrides["secure"] = secure
+    if connect_timeout is not None:
+        overrides["connect_timeout"] = connect_timeout
+    if send_receive_timeout is not None:
+        overrides["send_receive_timeout"] = send_receive_timeout
+    if compress is not None:
+        overrides["compress"] = compress
+    if query_limit is not None:
+        overrides["query_limit"] = query_limit
+    if verify is not None:
+        overrides["verify"] = verify
+    if ca_cert is not None:
+        overrides["ca_cert"] = ca_cert
+    if client_cert is not None:
+        overrides["client_cert"] = client_cert
+    if client_cert_key is not None:
+        overrides["client_cert_key"] = client_cert_key
+    if http_proxy is not None:
+        overrides["http_proxy"] = http_proxy
+    if https_proxy is not None:
+        overrides["https_proxy"] = https_proxy
+    if client_name is not None:
+        overrides["client_name"] = client_name
 
     # Add kwargs to overrides if they match config keys
     extra_connect_args: Dict[str, Any] = {}
@@ -572,23 +575,15 @@ def create_engine(
     if overrides:
         config = config.with_overrides(**overrides)
 
-    # Set default password from environment if password is empty
-    if not config.password:
+    has_explicit_password = "password" in overrides or (url is not None and urlparse(url).password is not None)
+
+    # Set default password from environment or fallback if no explicit password was provided
+    if not has_explicit_password and not config.password:
         env_password = os.environ.get("CLICKHOUSE_PASSWORD")
         if env_password is not None:
             config = config.with_overrides(password=env_password)
-        elif not config.password and not overrides.get("password"):
-            # Default to "123" only if not explicitly set to empty string and no env var
-             # NOTE: Original logic was: if not config.password -> check env -> else "123"
-             # I'll keep it mostly same but be careful about explicit empty string.
-             # If user passed password="", config.password is ""
-             pass
-        
-    # Re-eval "123" default for backward compat if it was relying on it.
-    # The original logic applied "123" if config.password was empty after env check.
-    if not config.password:
-             config = config.with_overrides(password="123")
-
+        else:
+            config = config.with_overrides(password="")
 
     merged_connect_args: Dict[str, Any] = dict(url_connect_args)
     merged_connect_args.update(extra_connect_args)

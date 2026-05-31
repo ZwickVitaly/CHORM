@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import os
 import pathlib
 import sys
 import types
@@ -14,13 +13,13 @@ import pytest
 
 def _ensure_stub_clickhouse_module() -> None:
     """Inject a stub module if clickhouse-connect is unavailable."""
-    if "clickhouse_connect" in sys.modules:
-        return
-
-    stub = types.ModuleType("clickhouse_connect")
-    stub.get_client = MagicMock()
-    stub.get_async_client = MagicMock()
-    sys.modules["clickhouse_connect"] = stub
+    try:
+        import clickhouse_connect  # noqa: F401
+    except ImportError:
+        stub = types.ModuleType("clickhouse_connect")
+        stub.get_client = MagicMock()
+        stub.get_async_client = MagicMock()
+        sys.modules["clickhouse_connect"] = stub
 
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
@@ -44,6 +43,7 @@ def test_create_async_engine_defaults(async_client: MagicMock, monkeypatch: pyte
     # Use AsyncMock for get_async_client since _create_client is now async
     get_async_client = AsyncMock(return_value=async_client)
     monkeypatch.setattr("chorm.async_engine.clickhouse_connect.get_async_client", get_async_client)
+    monkeypatch.delenv("CLICKHOUSE_PASSWORD", raising=False)
 
     engine = create_async_engine()
 
@@ -55,7 +55,7 @@ def test_create_async_engine_defaults(async_client: MagicMock, monkeypatch: pyte
             host="localhost",
             port=8123,
             username="default",
-            password="123",  # Default EngineConfig reads from CLICKHOUSE_PASSWORD env var
+            password="",  # Default EngineConfig reads from CLICKHOUSE_PASSWORD env var
             database="default",
             secure=False,
             connect_timeout=10,
@@ -130,3 +130,21 @@ def test_query_and_execute_delegate_to_client(async_client: MagicMock, monkeypat
         async_client.command.assert_awaited_once_with("SYSTEM FLUSH LOGS", parameters=None, settings=None)
 
     asyncio.run(_exercise())
+
+
+def test_empty_password_not_overridden(async_client: MagicMock, monkeypatch: pytest.MonkeyPatch) -> None:
+    get_async_client = AsyncMock(return_value=async_client)
+    monkeypatch.setattr("chorm.async_engine.clickhouse_connect.get_async_client", get_async_client)
+
+    # 1. Explicit empty password
+    engine = create_async_engine(password="")
+    assert engine.config.password == ""
+
+    # 2. DSN with empty password
+    engine = create_async_engine("clickhouse://default:@localhost:8123")
+    assert engine.config.password == ""
+
+    # 3. No password provided (should default to "" if CLICKHOUSE_PASSWORD is not set)
+    monkeypatch.delenv("CLICKHOUSE_PASSWORD", raising=False)
+    engine = create_async_engine()
+    assert engine.config.password == ""

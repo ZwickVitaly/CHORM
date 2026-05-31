@@ -1,24 +1,24 @@
 """Tests for CHORM validation system."""
 
-import pytest
 import re
 
+import pytest
+
+from chorm.declarative import Column, Table
 from chorm.exceptions import ValidationError
+from chorm.table_engines import MergeTree
+from chorm.types import Float64, Int32, String
 from chorm.validators import (
-    Validator,
-    RangeValidator,
-    LengthValidator,
-    RegexValidator,
+    CustomValidator,
     EmailValidator,
     InValidator,
+    LengthValidator,
     NotInValidator,
-    CustomValidator,
+    RangeValidator,
+    RegexValidator,
+    Validator,
     validate_value,
 )
-from chorm.declarative import Table, Column
-from chorm.types import Int32, String, Float64
-from chorm.table_engines import MergeTree
-
 
 # ============================================================================
 # Base Validator Tests
@@ -638,6 +638,23 @@ class TestTableValidation:
             user.validate()
         assert "not nullable" in str(exc_info.value).lower()
 
+    def test_column_nullable_validation_without_validators(self):
+        """Test that Column with nullable=False and empty validators raises ValidationError on assignment."""
+
+        class TestTable(Table):
+            __tablename__ = "test_table"
+            __order_by__ = ("id",)
+            engine = MergeTree()
+            id = Column(Int32(), primary_key=True)
+            name = Column(String(), nullable=False)  # no validators
+
+        t = TestTable()
+        t.name = "John"
+        assert t.name == "John"
+
+        with pytest.raises(ValidationError, match="Column 'name' is not nullable"):
+            t.name = None
+
     def test_table_multiple_validators(self):
         """Test table with multiple validators on one column."""
 
@@ -680,7 +697,7 @@ class TestTableValidation:
 class TestSessionValidation:
     def test_session_add_validates(self):
         """Test that Session.add() validates instances."""
-        from chorm import create_engine, Session
+        from chorm import Session, create_engine
 
         class User(Table):
             __tablename__ = "users"
@@ -705,7 +722,7 @@ class TestSessionValidation:
 
     def test_session_commit_validates(self):
         """Test that Session.commit() validates all instances."""
-        from chorm import create_engine, Session
+        from chorm import Session, create_engine
 
         class User(Table):
             __tablename__ = "users"
@@ -741,7 +758,7 @@ class TestAsyncSessionValidation:
     @pytest.mark.asyncio
     async def test_async_session_add_validates(self):
         """Test that AsyncSession.add() validates instances."""
-        from chorm import create_async_engine, AsyncSession
+        from chorm import AsyncSession, create_async_engine
 
         class User(Table):
             __tablename__ = "users"
@@ -767,7 +784,7 @@ class TestAsyncSessionValidation:
     @pytest.mark.asyncio
     async def test_async_session_commit_validates(self):
         """Test that AsyncSession.commit() validates all instances."""
-        from chorm import create_async_engine, AsyncSession
+        from chorm import AsyncSession, create_async_engine
 
         class User(Table):
             __tablename__ = "users"

@@ -2,12 +2,12 @@
 
 import asyncio
 import time
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
 
 import pytest
 
-from chorm.retry import RetryConfig, with_retry, async_with_retry
 from chorm.exceptions import DatabaseConnectionError
+from chorm.retry import RetryConfig, async_with_retry, with_retry
 
 
 class TestRetryConfig:

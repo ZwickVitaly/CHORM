@@ -2,7 +2,7 @@
 
 from chorm import select
 from chorm.sql.explain import Explain
-from chorm.sql.expression import Identifier, Literal
+from chorm.sql.expression import Identifier
 
 
 def test_explain_ast():

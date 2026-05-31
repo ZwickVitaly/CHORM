@@ -1,26 +1,27 @@
 """Unit tests for CHORM exception handling."""
 
 import pytest
+
 from chorm.exceptions import (
     CHORMError,
-    DatabaseError,
-    DatabaseSyntaxError,
-    DatabaseConnectionError,
-    DatabaseAuthenticationError,
-    DatabaseStorageError,
-    DatabaseMemoryError,
-    classify_database_error,
-    QueryValidationError,
-    NoResultFound,
-    MultipleResultsFound,
-    TypeConversionError,
     ConfigurationError,
+    ConversionError,
+    DatabaseAuthenticationError,
+    DatabaseConnectionError,
+    DatabaseError,
+    DatabaseMemoryError,
+    DatabaseStorageError,
+    DatabaseSyntaxError,
+    DeclarativeError,
     # Backward compatibility
     EngineConfigurationError,
-    DeclarativeError,
-    ConversionError,
+    MultipleResultsFound,
+    NoResultFound,
+    QueryValidationError,
+    TypeConversionError,
+    classify_database_error,
 )
-from chorm.sql import select, func
+from chorm.sql import func, select
 from chorm.sql.expression import Identifier
 
 

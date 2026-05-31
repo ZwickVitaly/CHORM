@@ -1,8 +1,7 @@
 """Tests for connection timeout and configuration parameters."""
 
-import pytest
-from chorm.engine import EngineConfig, create_engine
 from chorm.async_engine import create_async_engine
+from chorm.engine import EngineConfig, create_engine
 
 
 class TestEngineConfig:

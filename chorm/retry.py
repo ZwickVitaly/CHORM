@@ -141,7 +141,7 @@ def with_retry(config: Optional[RetryConfig] = None) -> Callable[[Callable[..., 
                     if config.should_retry(e, attempt):
                         delay = config.calculate_delay(attempt)
                         logger.warning(
-                            f"Attempt {attempt + 1}/{config.max_attempts} failed: {e}. " f"Retrying in {delay:.2f}s..."
+                            f"Attempt {attempt + 1}/{config.max_attempts} failed: {e}. Retrying in {delay:.2f}s..."
                         )
                         time.sleep(delay)
                     else:
@@ -191,7 +191,7 @@ def async_with_retry(config: Optional[RetryConfig] = None) -> Callable[[Callable
                     if config.should_retry(e, attempt):
                         delay = config.calculate_delay(attempt)
                         logger.warning(
-                            f"Attempt {attempt + 1}/{config.max_attempts} failed: {e}. " f"Retrying in {delay:.2f}s..."
+                            f"Attempt {attempt + 1}/{config.max_attempts} failed: {e}. Retrying in {delay:.2f}s..."
                         )
                         await asyncio.sleep(delay)
                     else:
@@ -211,6 +211,6 @@ def async_with_retry(config: Optional[RetryConfig] = None) -> Callable[[Callable
 # Public API
 __all__ = [
     "RetryConfig",
-    "with_retry",
     "async_with_retry",
+    "with_retry",
 ]

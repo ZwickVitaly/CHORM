@@ -71,7 +71,7 @@ class User(Table):
 class Events(Table):
     __partition_by__ = "toYYYYMM(timestamp)"  # Monthly partitions
     __order_by__ = ["user_id", "timestamp"]
-    
+
 # Enables efficient partition dropping:
 # ALTER TABLE events DROP PARTITION '202401'
 ```
@@ -204,7 +204,7 @@ class Metrics(Table):
     __order_by__ = ["metric_name", "timestamp"]
     __partition_by__ = "toYYYYMM(timestamp)"
     __ttl__ = "timestamp + INTERVAL 90 DAY"  # Auto-cleanup
-    
+
     metric_name = Column(LowCardinality(String()))
     timestamp = Column(DateTime())
     value = Column(Float64())
@@ -216,13 +216,13 @@ class Metrics(Table):
 
 ```python
 from chorm import create_engine, Session
-from chorm.exceptions import ConnectionError
+from chorm.exceptions import DatabaseConnectionError
 
 try:
     engine = create_engine("clickhouse://localhost:8123")
     session = Session(engine)
     result = session.execute("SELECT 1")
-except ConnectionError as e:
+except DatabaseConnectionError as e:
     print(f"Failed to connect: {e}")
     # Implement retry logic or fallback
 ```
@@ -234,10 +234,10 @@ except ConnectionError as e:
 def insert_user(user_data):
     if not user_data.get("email"):
         raise ValueError("Email is required")
-    
+
     if user_data.get("age", 0) < 0:
         raise ValueError("Age must be positive")
-    
+
     stmt = insert(User).values(user_data)
     session.execute(stmt.to_sql())
 ```
@@ -277,7 +277,7 @@ def setup_table(engine):
 def test_user_insert(engine, setup_table):
     stmt = insert(User).values({"id": 1, "name": "Test"})
     engine.execute(stmt.to_sql())
-    
+
     result = engine.execute("SELECT count() FROM users")
     assert result[0][0] == 1
 ```
@@ -288,7 +288,7 @@ def test_user_insert(engine, setup_table):
 def test_query_generation():
     query = select(User).where(User.active == 1)
     sql = query.to_sql()
-    
+
     assert "WHERE" in sql
     assert "active = 1" in sql
 ```
@@ -301,10 +301,10 @@ from unittest.mock import Mock
 def test_user_service():
     mock_session = Mock()
     mock_session.execute.return_value = [{"id": 1, "name": "Test"}]
-    
+
     service = UserService(mock_session)
     users = service.get_active_users()
-    
+
     assert len(users) == 1
     assert users[0]["name"] == "Test"
 ```

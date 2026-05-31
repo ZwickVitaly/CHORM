@@ -1,42 +1,43 @@
 """Integration tests for AggregateFunction with AggregatingMergeTree."""
 
 import os
+
 import pytest
-from chorm import Table, Column, select, insert, create_engine
+
+from chorm import Column, Table, create_engine, insert, select
 from chorm.session import Session
-from chorm.types import (
-    UInt64,
-    UInt32,
-    UInt8,
-    Float64,
-    Date,
-    AggregateFunction,
-)
 from chorm.sql import (
-    sum_state,
-    sum_merge,
-    avg_state,
-    avg_merge,
-    count_state,
-    count_merge,
-    uniq_state,
-    uniq_merge,
-    uniq_exact_state,
-    uniq_exact_merge,
-    quantile_state,
-    quantile_merge,
-    min_state,
-    min_merge,
-    max_state,
-    max_merge,
-    sum_if_state,
-    sum_if_merge,
-    avg_if_state,
     avg_if_merge,
+    avg_if_state,
+    avg_merge,
+    avg_state,
+    count_merge,
+    count_state,
+    max_merge,
+    max_state,
+    min_merge,
+    min_state,
+    quantile_merge,
+    quantile_state,
+    sum_if_merge,
+    sum_if_state,
+    sum_merge,
+    sum_state,
+    uniq_exact_merge,
+    uniq_exact_state,
+    uniq_merge,
+    uniq_state,
 )
 from chorm.sql.expression import func
 from chorm.table_engines import AggregatingMergeTree, MergeTree
-
+from chorm.types import (
+    AggregateFunction,
+    Date,
+    Float64,
+    UInt8,
+    UInt32,
+    UInt64,
+)
 
 # Skip integration tests if ClickHouse is not available
 pytestmark = pytest.mark.skipif(
@@ -47,6 +48,7 @@ pytestmark = pytest.mark.skipif(
 
 class Metrics(Table):
     """Table with AggregateFunction columns for testing."""
+
     __tablename__ = "test_metrics_aggregate"
     date = Column(Date())
     revenue_state = Column(AggregateFunction("sum", (UInt64(),)))
@@ -62,6 +64,7 @@ class Metrics(Table):
 
 class MetricsWithIf(Table):
     """Table with AggregateFunction(sumIf, ...) columns."""
+
     __tablename__ = "test_metrics_if_aggregate"
     date = Column(Date())
     revenue_if_state = Column(AggregateFunction("sumIf", (UInt64(), UInt8())))
@@ -72,6 +75,7 @@ class MetricsWithIf(Table):
 
 class Orders(Table):
     """Source table for generating aggregate states."""
+
     __tablename__ = "test_orders_for_aggregate"
     id = Column(UInt64(), primary_key=True)
     date = Column(Date())
@@ -118,6 +122,7 @@ def setup_tables(engine):
 
     # Insert source data
     from datetime import date
+
     orders_data = [
         Orders(id=1, date=date(2024, 1, 1), amount=100, user_id=1, status=1),
         Orders(id=2, date=date(2024, 1, 1), amount=200, user_id=2, status=1),
@@ -156,14 +161,14 @@ def test_create_aggregating_mergetree_table(engine, setup_tables):
     ).all()
 
     column_types = {row[0]: row[1] for row in result}
-    
+
     assert "revenue_state" in column_types
     assert "AggregateFunction" in column_types["revenue_state"]
     assert "sum" in column_types["revenue_state"]
-    
+
     assert "avg_state" in column_types
     assert "AggregateFunction" in column_types["avg_state"]
-    
+
     assert "count_state" in column_types
     assert "AggregateFunction" in column_types["count_state"]
 
@@ -225,21 +230,26 @@ def test_select_aggregate_states_with_merge(engine, setup_tables):
     session.commit()
 
     # Select and merge aggregate states
-    stmt = select(
-        Metrics.date,
-        sum_merge(Metrics.revenue_state).label("total_revenue"),
-        avg_merge(Metrics.avg_state).label("avg_amount"),
-        count_merge(Metrics.count_state).label("total_count"),
-        uniq_merge(Metrics.uniq_state).label("unique_users"),
-        uniq_exact_merge(Metrics.uniq_exact_state).label("unique_users_exact"),
-        min_merge(Metrics.min_state).label("min_amount"),
-        max_merge(Metrics.max_state).label("max_amount"),
-    ).select_from(Metrics).group_by(Metrics.date).order_by(Metrics.date)
+    stmt = (
+        select(
+            Metrics.date,
+            sum_merge(Metrics.revenue_state).label("total_revenue"),
+            avg_merge(Metrics.avg_state).label("avg_amount"),
+            count_merge(Metrics.count_state).label("total_count"),
+            uniq_merge(Metrics.uniq_state).label("unique_users"),
+            uniq_exact_merge(Metrics.uniq_exact_state).label("unique_users_exact"),
+            min_merge(Metrics.min_state).label("min_amount"),
+            max_merge(Metrics.max_state).label("max_amount"),
+        )
+        .select_from(Metrics)
+        .group_by(Metrics.date)
+        .order_by(Metrics.date)
+    )
 
     results = session.execute(stmt).all()
 
     assert len(results) > 0
-    
+
     # Verify merged values
     for row in results:
         assert row.total_revenue is not None
@@ -273,16 +283,21 @@ def test_aggregate_function_with_sumif(engine, setup_tables):
     session.commit()
 
     # Select and merge
-    stmt = select(
-        MetricsWithIf.date,
-        sum_if_merge(MetricsWithIf.revenue_if_state).label("total_revenue"),
-        avg_if_merge(MetricsWithIf.avg_if_state).label("avg_amount"),
-    ).select_from(MetricsWithIf).group_by(MetricsWithIf.date).order_by(MetricsWithIf.date)
+    stmt = (
+        select(
+            MetricsWithIf.date,
+            sum_if_merge(MetricsWithIf.revenue_if_state).label("total_revenue"),
+            avg_if_merge(MetricsWithIf.avg_if_state).label("avg_amount"),
+        )
+        .select_from(MetricsWithIf)
+        .group_by(MetricsWithIf.date)
+        .order_by(MetricsWithIf.date)
+    )
 
     results = session.execute(stmt).all()
 
     assert len(results) > 0
-    
+
     for row in results:
         assert row.total_revenue is not None
         assert row.avg_amount is not None
@@ -292,12 +307,10 @@ def test_aggregate_function_merge_multiple_rows(engine, setup_tables):
     """Test that Merge correctly combines multiple aggregate states."""
     session = Session(engine)
 
-    from datetime import date
-
     # Insert multiple rows with same date (should be merged by AggregatingMergeTree)
     # First, clear existing data
     session.execute(f"TRUNCATE TABLE {Metrics.__tablename__}")
-    
+
     # Insert data grouped by date - need all columns from Metrics table
     stmt = insert(Metrics).from_select(
         select(
@@ -321,18 +334,23 @@ def test_aggregate_function_merge_multiple_rows(engine, setup_tables):
     session.commit()
 
     # Select merged values
-    stmt = select(
-        Metrics.date,
-        sum_merge(Metrics.revenue_state).label("total_revenue"),
-        count_merge(Metrics.count_state).label("total_count"),
-    ).select_from(Metrics).group_by(Metrics.date).order_by(Metrics.date)
+    stmt = (
+        select(
+            Metrics.date,
+            sum_merge(Metrics.revenue_state).label("total_revenue"),
+            count_merge(Metrics.count_state).label("total_count"),
+        )
+        .select_from(Metrics)
+        .group_by(Metrics.date)
+        .order_by(Metrics.date)
+    )
 
     results = session.execute(stmt).all()
 
     # Should have aggregated values
     total_revenue = sum(row.total_revenue for row in results)
     total_count = sum(row.total_count for row in results)
-    
+
     # Total from source: 100 + 200 + 150 + 300 + 50 = 800
     assert total_revenue == 800
     # Total count: 5 orders
@@ -369,10 +387,15 @@ def test_aggregate_function_with_quantile(engine, setup_tables):
         session.commit()
 
         # Select with quantileMerge - quantileMerge(0.5)(state) syntax
-        stmt = select(
-            MetricsQuantile.date,
-            quantile_merge(0.5, MetricsQuantile.quantile_state).label("median_amount"),
-        ).select_from(MetricsQuantile).group_by(MetricsQuantile.date).order_by(MetricsQuantile.date)
+        stmt = (
+            select(
+                MetricsQuantile.date,
+                quantile_merge(0.5, MetricsQuantile.quantile_state).label("median_amount"),
+            )
+            .select_from(MetricsQuantile)
+            .group_by(MetricsQuantile.date)
+            .order_by(MetricsQuantile.date)
+        )
 
         results = session.execute(stmt).all()
         assert len(results) > 0
@@ -385,4 +408,3 @@ def test_aggregate_function_with_quantile(engine, setup_tables):
             session.execute(f"DROP TABLE IF EXISTS {MetricsQuantile.__tablename__}")
         except Exception:
             pass
-

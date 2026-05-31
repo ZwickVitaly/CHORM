@@ -1,12 +1,12 @@
 """Integration tests for Performance & Bulk Operations."""
 
 import os
+
 import pytest
 
-from chorm import Table, Column, Engine, insert, select, optimize_table
+from chorm import Column, Table, insert, optimize_table, select
 from chorm.table_engines import MergeTree
-from chorm.types import UInt64, String, Date
-from chorm.sql.expression import Identifier
+from chorm.types import Date, String, UInt64
 
 # Skip if ClickHouse is not available
 pytestmark = pytest.mark.skipif(not os.getenv("CLICKHOUSE_HOST"), reason="CLICKHOUSE_HOST environment variable not set")

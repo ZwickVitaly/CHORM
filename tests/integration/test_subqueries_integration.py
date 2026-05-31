@@ -1,12 +1,13 @@
 """Integration tests for Subqueries functionality with real ClickHouse."""
 
 import os
-import pytest
-from chorm import Table, Column, MergeTree, select, insert, create_engine
-from chorm.session import Session
-from chorm.types import UInt64, String
-from chorm.sql.expression import func, exists, Identifier
 
+import pytest
+
+from chorm import Column, MergeTree, Table, create_engine, insert, select
+from chorm.session import Session
+from chorm.sql.expression import Identifier, exists, func
+from chorm.types import String, UInt64
 
 # Skip integration tests if ClickHouse is not available
 pytestmark = pytest.mark.skipif(

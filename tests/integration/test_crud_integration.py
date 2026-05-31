@@ -2,9 +2,10 @@
 
 import os
 from datetime import datetime
-from chorm import Table, Column, create_engine, Session, select
-from chorm.types import UInt64, String, DateTime
+
+from chorm import Column, Session, Table, create_engine, select
 from chorm.table_engines import MergeTree
+from chorm.types import DateTime, String, UInt64
 
 
 class User(Table):

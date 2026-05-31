@@ -3,17 +3,17 @@
 import pytest
 
 from chorm.batch import (
+    BatchDelete,
     BatchInsert,
     BatchUpdate,
-    BatchDelete,
+    batch_delete,
     batch_insert,
     batch_update,
-    batch_delete,
 )
-
 
 # Suppress DeprecationWarnings for legacy batch classes tested here
 pytestmark = pytest.mark.filterwarnings("ignore::DeprecationWarning")
+
 
 class TestBatchInsert:
     """Test BatchInsert class."""

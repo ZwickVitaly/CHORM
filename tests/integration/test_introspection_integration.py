@@ -1,24 +1,23 @@
 """Integration tests for table introspection."""
 
-import os
-import sys
 import ast
 import inspect
-import importlib
+import os
+import sys
+
 import pytest
-from chorm import Table, Column, create_engine
+
+from chorm import Column, Table, create_engine
+from chorm.introspection import ModelGenerator, TableIntrospector
 from chorm.session import Session
+from chorm.table_engines import AggregatingMergeTree, Distributed, MergeTree
 from chorm.types import (
-    UInt64,
-    UInt32,
-    UInt16,
-    UInt8,
-    Float64,
-    Date,
     AggregateFunction,
+    Date,
+    Float64,
+    UInt32,
+    UInt64,
 )
-from chorm.table_engines import AggregatingMergeTree, MergeTree, Distributed
-from chorm.introspection import TableIntrospector, ModelGenerator
 
 # Ensure we use real clickhouse_connect, not a mock
 # Some tests mock clickhouse_connect at module level, which can leak here
@@ -42,6 +41,7 @@ pytestmark = pytest.mark.skipif(
 # Test table models
 class IntrospectUsers(Table):
     """Simple MergeTree table for testing."""
+
     __tablename__ = "test_introspect_users"
     id = Column(UInt64(), primary_key=True)
     name = Column("String")
@@ -53,6 +53,7 @@ class IntrospectUsers(Table):
 
 class IntrospectMetrics(Table):
     """AggregatingMergeTree table with AggregateFunction columns."""
+
     __tablename__ = "test_introspect_metrics"
     date = Column(Date())
     revenue_state = Column(AggregateFunction("sum", (UInt64(),)))
@@ -67,6 +68,7 @@ class IntrospectMetrics(Table):
 
 class IntrospectLocalUsers(Table):
     """Local table for Distributed table testing."""
+
     __tablename__ = "test_introspect_local_users"
     id = Column(UInt64())
     name = Column("String")
@@ -77,15 +79,13 @@ class IntrospectLocalUsers(Table):
 
 class IntrospectDistributedUsers(Table):
     """Distributed table for testing."""
+
     __tablename__ = "test_introspect_distributed_users"
     id = Column(UInt64())
     name = Column("String")
     created_at = Column(Date())
     __engine__ = Distributed(
-        cluster="default",
-        database="default",
-        table="test_introspect_local_users",
-        sharding_key="rand()"
+        cluster="default", database="default", table="test_introspect_local_users", sharding_key="rand()"
     )
 
 
@@ -105,9 +105,6 @@ def engine():
         database=database,
     )
     return engine
-
-
-
 
 
 @pytest.fixture(scope="module")
@@ -160,10 +157,9 @@ def client(engine):
         if not hasattr(module, "__file__") or getattr(module, "__file__", None) is None:
             # It's a mock, remove it
             del sys.modules["clickhouse_connect"]
-    
+
     # Import fresh (will get real module if mock was removed)
-    import clickhouse_connect
-    
+
     return clickhouse_connect.get_client(
         host=engine.config.host,
         port=engine.config.port,
@@ -203,16 +199,32 @@ def extract_model_attributes(code: str) -> dict:
                                     attrs["tablename"] = item.value.value
                             elif attr_name == "__engine__":
                                 # Extract engine expression
-                                attrs["engine"] = ast.unparse(item.value) if hasattr(ast, "unparse") else str(item.value)
+                                attrs["engine"] = (
+                                    ast.unparse(item.value) if hasattr(ast, "unparse") else str(item.value)
+                                )
                             elif attr_name == "__order_by__":
-                                attrs["order_by"] = ast.unparse(item.value) if hasattr(ast, "unparse") else str(item.value)
+                                attrs["order_by"] = (
+                                    ast.unparse(item.value) if hasattr(ast, "unparse") else str(item.value)
+                                )
                             elif attr_name == "__partition_by__":
-                                attrs["partition_by"] = ast.unparse(item.value) if hasattr(ast, "unparse") else str(item.value)
+                                attrs["partition_by"] = (
+                                    ast.unparse(item.value) if hasattr(ast, "unparse") else str(item.value)
+                                )
                             elif isinstance(target, ast.Name) and not attr_name.startswith("_"):
                                 # Column definition
-                                if isinstance(item.value, ast.Call) and isinstance(item.value.func, ast.Name) and item.value.func.id == "Column":
+                                if (
+                                    isinstance(item.value, ast.Call)
+                                    and isinstance(item.value.func, ast.Name)
+                                    and item.value.func.id == "Column"
+                                ):
                                     # Extract column type
-                                    col_type = ast.unparse(item.value.args[0]) if hasattr(ast, "unparse") and item.value.args else str(item.value.args[0]) if item.value.args else None
+                                    col_type = (
+                                        ast.unparse(item.value.args[0])
+                                        if hasattr(ast, "unparse") and item.value.args
+                                        else str(item.value.args[0])
+                                        if item.value.args
+                                        else None
+                                    )
                                     attrs["columns"][attr_name] = col_type
 
     return attrs
@@ -240,18 +252,22 @@ def compare_table_models(original_model: type, generated_code: str) -> bool:
     generated_attrs = extract_model_attributes(generated_code)
 
     # Compare
-    assert generated_attrs["tablename"] == original_attrs["tablename"], f"Tablename mismatch: {generated_attrs['tablename']} != {original_attrs['tablename']}"
-    
+    assert generated_attrs["tablename"] == original_attrs["tablename"], (
+        f"Tablename mismatch: {generated_attrs['tablename']} != {original_attrs['tablename']}"
+    )
+
     # Check engine (allow for minor formatting differences)
     assert generated_attrs["engine"] is not None, "Engine not found in generated code"
-    
+
     # Check columns count
-    assert len(generated_attrs["columns"]) == len(original_attrs["columns"]), f"Column count mismatch: {len(generated_attrs['columns'])} != {len(original_attrs['columns'])}"
-    
+    assert len(generated_attrs["columns"]) == len(original_attrs["columns"]), (
+        f"Column count mismatch: {len(generated_attrs['columns'])} != {len(original_attrs['columns'])}"
+    )
+
     # Check order_by if present
     if original_attrs["order_by"]:
         assert generated_attrs["order_by"] is not None, "ORDER BY missing in generated code"
-    
+
     return True
 
 
@@ -267,7 +283,9 @@ class TestIntrospectionIntegration:
         table_name = IntrospectUsers.__tablename__
         session = Session(engine)
         try:
-            result = session.execute(f"SELECT engine FROM system.tables WHERE database = currentDatabase() AND name = '{table_name}'")
+            result = session.execute(
+                f"SELECT engine FROM system.tables WHERE database = currentDatabase() AND name = '{table_name}'"
+            )
             if not result.all():
                 pytest.fail(f"Table {table_name} was not created by setup_tables fixture")
             engine_type = result.scalar()
@@ -278,7 +296,7 @@ class TestIntrospectionIntegration:
 
         # Get table info
         table_info = introspector.get_table_info(table_name)
-        
+
         # Verify table_info contains expected data
         assert table_info["engine"] == "MergeTree", f"Expected MergeTree, got {table_info['engine']}"
         assert len(table_info["columns"]) > 0, f"Table {table_name} has no columns"
@@ -351,7 +369,6 @@ class TestIntrospectionIntegration:
         # Compare with original model
         compare_table_models(IntrospectMetrics, generated_code)
 
-
     def test_generate_file_with_multiple_tables(self, engine, setup_tables, client):
         """Test generating a complete file with multiple tables."""
         introspector = TableIntrospector(client)
@@ -395,7 +412,7 @@ class TestIntrospectionIntegration:
 
 class TestDistributedIntrospectionIntegration:
     """Integration tests for Distributed table introspection.
-    
+
     These tests use a local loopback Distributed table (cluster='default').
     """
 
@@ -421,7 +438,7 @@ class TestDistributedIntrospectionIntegration:
 
             # Create local table
             session.execute(IntrospectLocalUsers.create_table(exists_ok=True))
-            
+
             # Create Distributed table
             try:
                 session.execute(IntrospectDistributedUsers.create_table(exists_ok=True))
@@ -482,6 +499,3 @@ class TestDistributedIntrospectionIntegration:
 
         # Compare with original model
         compare_table_models(IntrospectDistributedUsers, generated_code)
-
-
-

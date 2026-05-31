@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import pathlib
 import sys
 import types
@@ -13,13 +12,13 @@ import pytest
 
 def _ensure_stub_clickhouse_module() -> None:
     """Inject a stub module if clickhouse-connect is unavailable."""
-    if "clickhouse_connect" in sys.modules:
-        return
-
-    stub = types.ModuleType("clickhouse_connect")
-    stub.get_client = MagicMock()
-    stub.get_async_client = MagicMock()
-    sys.modules["clickhouse_connect"] = stub
+    try:
+        import clickhouse_connect  # noqa: F401
+    except ImportError:
+        stub = types.ModuleType("clickhouse_connect")
+        stub.get_client = MagicMock()
+        stub.get_async_client = MagicMock()
+        sys.modules["clickhouse_connect"] = stub
 
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
@@ -41,6 +40,7 @@ def client() -> MagicMock:
 def test_create_engine_defaults(client: MagicMock, monkeypatch: pytest.MonkeyPatch) -> None:
     get_client = MagicMock(return_value=client)
     monkeypatch.setattr("chorm.engine.clickhouse_connect.get_client", get_client)
+    monkeypatch.delenv("CLICKHOUSE_PASSWORD", raising=False)
 
     engine = create_engine()
     connection = engine.connect()
@@ -51,7 +51,7 @@ def test_create_engine_defaults(client: MagicMock, monkeypatch: pytest.MonkeyPat
             host="localhost",
             port=8123,
             username="default",
-            password="123",  # Default EngineConfig reads from CLICKHOUSE_PASSWORD env var
+            password="",  # Default EngineConfig reads from CLICKHOUSE_PASSWORD env var
             database="default",
             secure=False,
             connect_timeout=10,
@@ -116,3 +116,21 @@ def test_query_and_execute_delegate_to_client(client: MagicMock, monkeypatch: py
     assert result_execute == "ok"
     client.query.assert_called_once_with("SELECT 1", parameters=None, settings=None)
     client.command.assert_called_once_with("SYSTEM FLUSH LOGS", parameters=None, settings=None)
+
+
+def test_empty_password_not_overridden(client: MagicMock, monkeypatch: pytest.MonkeyPatch) -> None:
+    get_client = MagicMock(return_value=client)
+    monkeypatch.setattr("chorm.engine.clickhouse_connect.get_client", get_client)
+
+    # 1. Explicit empty password
+    engine = create_engine(password="")
+    assert engine.config.password == ""
+
+    # 2. DSN with empty password
+    engine = create_engine("clickhouse://default:@localhost:8123")
+    assert engine.config.password == ""
+
+    # 3. No password provided (should default to "" if CLICKHOUSE_PASSWORD is not set)
+    monkeypatch.delenv("CLICKHOUSE_PASSWORD", raising=False)
+    engine = create_engine()
+    assert engine.config.password == ""

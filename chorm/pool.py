@@ -28,7 +28,7 @@ class ConnectionPool:
 
     Example:
         >>> from chorm import EngineConfig
-        >>> config = EngineConfig(host='localhost', port=8123)
+        >>> config = EngineConfig(host="localhost", port=8123)
         >>> pool = ConnectionPool(config, pool_size=10)
         >>> conn = pool.get()
         >>> try:
@@ -113,7 +113,6 @@ class ConnectionPool:
 
         return conn
 
-
     def _validate_connection(self, conn: Connection) -> bool:
         """Validate that a connection is still alive.
 
@@ -176,16 +175,16 @@ class ConnectionPool:
                     conn.close()
                     conn = self._create_connection()
                 elif self._pre_ping and not self._validate_connection(conn):
-                     # Connection dead, discard and create new one
+                    # Connection dead, discard and create new one
                     conn.close()
                     conn = self._create_connection()
 
                 return conn
-            except Empty:
+            except Empty as exc:
                 # Pool exhausted and timeout exceeded
                 raise RuntimeError(
-                    f"Connection pool exhausted (pool_size={self._pool_size}, " f"max_overflow={self._max_overflow})"
-                )
+                    f"Connection pool exhausted (pool_size={self._pool_size}, max_overflow={self._max_overflow})"
+                ) from exc
 
     def return_connection(self, conn: Connection) -> None:
         """Return a connection to the pool.
@@ -212,7 +211,7 @@ class ConnectionPool:
                 new_conn = self._create_connection()
                 try:
                     self._pool.put_nowait(new_conn)
-                except:
+                except Exception:
                     # Pool is somehow full, close the new connection
                     new_conn.close()
 
@@ -235,7 +234,7 @@ class ConnectionPool:
                 # Pooled connection - return to pool
                 try:
                     self._pool.put_nowait(conn)
-                except:
+                except Exception:
                     # Pool is full somehow, close the connection
                     conn.close()
 
@@ -257,7 +256,6 @@ class ConnectionPool:
 
         age = time.time() - created_at
         return age > self._recycle
-
 
     def close_all(self) -> None:
         """Close all connections in the pool.

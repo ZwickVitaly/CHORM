@@ -1,15 +1,16 @@
-
+import ipaddress
 import logging
 import uuid
-import ipaddress
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
+
 from chorm import create_engine
 from chorm.batch import bulk_insert
 
 # Configure logging to see performance warnings or info
 logging.basicConfig(level=logging.INFO)
+
 
 class TestNativeTypes:
     @pytest.fixture
@@ -35,51 +36,35 @@ class TestNativeTypes:
 
     def test_bulk_insert_complex_types(self, engine):
         """Verify that bulk_insert handles complex Python types naturally."""
-        
+
         # Prepare data with rich Python types
         u1 = uuid.uuid4()
         u2 = uuid.uuid4()
         ip1 = ipaddress.IPv4Address("192.168.1.1")
         ip2 = ipaddress.IPv4Address("10.0.0.1")
         # Use UTC aware datetime, strip microseconds to avoid precision issues if any
-        now = datetime.now(timezone.utc).replace(microsecond=0)
-        
+        now = datetime.now(UTC).replace(microsecond=0)
+
         data = [
-            [
-                1, 
-                u1, 
-                ip1, 
-                ["tag1", "tag2"], 
-                {"key": "value", "env": "prod"}, 
-                "active", 
-                now
-            ],
-            [
-                2, 
-                u2, 
-                ip2, 
-                ["tag3"], 
-                {"key": "value2"}, 
-                "inactive", 
-                now
-            ]
+            [1, u1, ip1, ["tag1", "tag2"], {"key": "value", "env": "prod"}, "active", now],
+            [2, u2, ip2, ["tag3"], {"key": "value2"}, "inactive", now],
         ]
-        
+
         # Insert using bulk_insert (native)
         client = engine.connect().client
         stats = bulk_insert(
             client=client,
             table_name="test_native_types",
             data=data,
-            columns=["id", "uuid", "ip", "tags", "metadata", "status", "created_at"]
+            columns=["id", "uuid", "ip", "tags", "metadata", "status", "created_at"],
         )
-        
+
         assert stats["total_rows"] == 2
-        
+
         # Verify data came back correctly
         with engine.connection() as conn:
             rows = conn.query("SELECT * FROM test_native_types ORDER BY id").result_rows
-            
+
             # Row 1
             assert rows[0][0] == 1
             assert rows[0][1] == u1
@@ -87,12 +72,12 @@ class TestNativeTypes:
             assert rows[0][3] == ["tag1", "tag2"]
             assert rows[0][4] == {"key": "value", "env": "prod"}
             assert rows[0][5] == "active"
-            
+
             ret_dt = rows[0][6]
             # Ensure comparison is apple-to-apple (both timezone aware)
             if ret_dt.tzinfo is None:
-                ret_dt = ret_dt.replace(tzinfo=timezone.utc)
-            
+                ret_dt = ret_dt.replace(tzinfo=UTC)
+
             assert ret_dt == now
 
             # Row 2

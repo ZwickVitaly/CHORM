@@ -27,15 +27,15 @@ from chorm.types import UInt64, String, DateTime
 
 class Event(Table):
     __tablename__ = "events"
-    
+
     user_id = Column(UInt64())
     event_type = Column(String())
     timestamp = Column(DateTime())
-    
+
     # Good: Low cardinality (event_type) → Medium (user_id) → High (timestamp)
     __order_by__ = ("event_type", "user_id", "timestamp")
-    
-    engine = MergeTree()
+
+    __engine__ = MergeTree()
 ```
 
 ### Partition Key Strategy
@@ -50,16 +50,16 @@ Partitions help with data management and query performance.
 ```python
 class UserActivity(Table):
     __tablename__ = "user_activity"
-    
+
     date = Column(Date())
     user_id = Column(UInt64())
     action = Column(String())
-    
+
     # Partition by month for monthly data retention
     __partition_by__ = ("toYYYYMM(date)",)
     __order_by__ = ("date", "user_id")
-    
-    engine = MergeTree()
+
+    __engine__ = MergeTree()
 ```
 
 ### ORDER BY Importance
@@ -292,6 +292,44 @@ for user in users:
 session.commit()
 ```
 
+### Query Streaming
+
+For large result sets that do not fit in memory, CHORM supports query streaming. This downloads query results block-by-block lazily using a managed connection context.
+
+**Best Practices:**
+- Use `session.stream(...)` within a `with` context manager.
+- For asynchronous code, use `await session.stream(...)` inside an `async with` block.
+- Use `.first()`, `.one()`, or `.one_or_none()` to consume parts of the stream safely.
+
+**Synchronous Example:**
+```python
+stmt = select(User).order_by(User.id)
+
+with session.stream(stmt, model=User) as stream:
+    for user in stream:
+        # Process user row by row with O(1) memory overhead
+        process_user(user)
+```
+
+**Asynchronous Example:**
+```python
+async with await async_session.stream(stmt) as stream:
+    async for row in stream:
+        process_row(row)
+```
+
+**Transformations & List Retrieval:**
+You can stream raw tuples, dictionary mappings, or scalars. Standard list retrieval methods are also supported:
+```python
+with session.stream(stmt) as stream:
+    # Stream dictionary mappings
+    for mapping in stream.mappings():
+         pass
+
+    # Extract only the first element and close the connection immediately
+    first_row = stream.first()
+```
+
 ---
 
 ## Monitoring & Profiling
@@ -354,18 +392,19 @@ for row in results:
 - Use `max_memory_usage` setting
 
 ```python
+from chorm import Table, Column, MergeTree
 from chorm.types import LowCardinality, String
 
 class Event(Table):
     __tablename__ = "events"
-    
+
     # Good: Low cardinality string
     event_type = Column(LowCardinality(String()))  # ~100 unique values
-    
+
     # Regular string for high cardinality
     user_agent = Column(String())  # Millions of unique values
-    
-    engine = MergeTree()
+
+    __engine__ = MergeTree()
 ```
 
 ---

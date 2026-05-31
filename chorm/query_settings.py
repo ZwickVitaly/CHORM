@@ -28,7 +28,7 @@ class QuerySettings:
         >>> settings = QuerySettings(
         ...     max_threads=4,
         ...     max_memory_usage=10_000_000_000,  # 10GB
-        ...     max_execution_time=300  # 5 minutes
+        ...     max_execution_time=300,  # 5 minutes
         ... )
         >>> sql = f"SELECT * FROM users SETTINGS {settings}"
     """
@@ -243,9 +243,7 @@ class QueryOptimizer:
         >>>
         >>> # Get recommendations for a query
         >>> recommendations = optimizer.recommend_settings(
-        ...     query_type="analytics",
-        ...     estimated_rows=10_000_000,
-        ...     complexity="high"
+        ...     query_type="analytics", estimated_rows=10_000_000, complexity="high"
         ... )
     """
 
@@ -269,10 +267,7 @@ class QueryOptimizer:
 
         Example:
             >>> settings = optimizer.recommend_settings(
-            ...     query_type="analytics",
-            ...     estimated_rows=100_000_000,
-            ...     complexity="high",
-            ...     time_limit=300
+            ...     query_type="analytics", estimated_rows=100_000_000, complexity="high", time_limit=300
             ... )
         """
         settings = QuerySettings()
@@ -334,9 +329,9 @@ class QueryOptimizer:
 
 # Public API
 __all__ = [
-    "QuerySettings",
+    "SETTINGS_PRESETS",
     "ExecutionStats",
     "QueryOptimizer",
+    "QuerySettings",
     "get_preset",
-    "SETTINGS_PRESETS",
 ]

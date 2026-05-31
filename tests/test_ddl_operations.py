@@ -2,18 +2,18 @@
 
 from chorm import Column, Table
 from chorm.sql.ddl import (
-    drop_table,
-    truncate_table,
-    rename_table,
     add_column,
+    add_index,
     drop_column,
+    drop_index,
+    drop_table,
     modify_column,
     rename_column,
-    add_index,
-    drop_index,
+    rename_table,
+    truncate_table,
 )
-from chorm.types import String, UInt64, UInt8
 from chorm.table_engines import MergeTree
+from chorm.types import String, UInt64
 
 
 class DDLTestTable(Table):

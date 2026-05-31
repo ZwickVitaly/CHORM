@@ -1,11 +1,10 @@
 """Tests for enhanced ClickHouse index support."""
 
-import pytest
-from chorm import Table, Column
-from chorm.types import UInt64, String, DateTime
-from chorm.table_engines import MergeTree
+from chorm import Column, Table
 from chorm.sql.ddl import add_index
 from chorm.sql.expression import Identifier
+from chorm.table_engines import MergeTree
+from chorm.types import DateTime, String, UInt64
 
 
 class IndexTestTable(Table):

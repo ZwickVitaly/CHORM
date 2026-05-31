@@ -2,9 +2,10 @@
 
 import os
 from datetime import date
-from chorm import Table, Column, create_engine, Session, select
-from chorm.types import UInt64, String, Date
+
+from chorm import Column, Session, Table, create_engine, select
 from chorm.table_engines import ReplacingMergeTree
+from chorm.types import Date, String, UInt64
 
 
 class ProductStats(Table):
@@ -131,9 +132,7 @@ def main():
     print("\n10. Checking partitions...")
     with engine.connect() as conn:
         result = conn.query(
-            "SELECT partition, rows FROM system.parts "
-            "WHERE table = 'product_stats' AND active = 1 "
-            "ORDER BY partition"
+            "SELECT partition, rows FROM system.parts WHERE table = 'product_stats' AND active = 1 ORDER BY partition"
         )
         print("\n  Active partitions:")
         for row in result.result_rows:

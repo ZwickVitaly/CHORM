@@ -1,10 +1,9 @@
 """Tests for conditional functions (sumIf, avgIf, etc.) in regular SELECT queries."""
 
-import pytest
-from chorm import Table, Column, select
-from chorm.sql import sum_if, avg_if, count_if, min_if, max_if, uniq_if
+from chorm import Column, Table, select
+from chorm.sql import avg_if, count_if, max_if, min_if, sum_if, uniq_if
 from chorm.sql.expression import func
-from chorm.types import UInt64, UInt32, String, Float64
+from chorm.types import Float64, String, UInt32, UInt64
 
 
 class Orders(Table):
@@ -187,4 +186,3 @@ class TestConditionalFunctionsInSelect:
         assert "minIf" in sql
         assert "maxIf" in sql
         assert "uniqIf" in sql
-

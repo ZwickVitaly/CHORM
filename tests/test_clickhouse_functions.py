@@ -1,32 +1,31 @@
 """Unit tests for ClickHouse-specific function wrappers."""
 
-import pytest
 from chorm.sql.expression import (
-    # Aggregation functions
-    uniq,
-    uniq_exact,
-    quantile,
-    quantiles,
-    median,
-    group_array,
-    stddev_pop,
-    var_pop,
-    corr,
-    # Date/Time functions
-    to_start_of_month,
-    to_start_of_week,
-    to_start_of_day,
-    date_diff,
-    now,
-    today,
-    # String functions
-    concat,
-    substring,
-    position,
-    length,
     # For testing
     Identifier,
     Literal,
+    # String functions
+    concat,
+    corr,
+    date_diff,
+    group_array,
+    length,
+    median,
+    now,
+    position,
+    quantile,
+    quantiles,
+    stddev_pop,
+    substring,
+    to_start_of_day,
+    # Date/Time functions
+    to_start_of_month,
+    to_start_of_week,
+    today,
+    # Aggregation functions
+    uniq,
+    uniq_exact,
+    var_pop,
 )
 
 

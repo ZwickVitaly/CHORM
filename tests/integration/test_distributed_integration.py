@@ -1,13 +1,14 @@
 """Integration tests for Distributed table engine."""
 
 import os
-import pytest
-from chorm import Table, Column, select, insert, create_engine
-from chorm.session import Session
-from chorm.types import UInt64, String, Date
-from chorm.table_engines import Distributed, MergeTree
-from chorm.sql.expression import func
 
+import pytest
+
+from chorm import Column, Table, create_engine, insert, select
+from chorm.session import Session
+from chorm.sql.expression import func
+from chorm.table_engines import Distributed, MergeTree
+from chorm.types import Date, String, UInt64
 
 # Skip integration tests if ClickHouse is not available
 pytestmark = pytest.mark.skipif(
@@ -18,6 +19,7 @@ pytestmark = pytest.mark.skipif(
 
 class LocalUsers(Table):
     """Local table on first ClickHouse instance."""
+
     __tablename__ = "test_local_users"
     id = Column(UInt64(), primary_key=True)
     name = Column(String())
@@ -28,6 +30,7 @@ class LocalUsers(Table):
 
 class DistributedUsers(Table):
     """Distributed table pointing to local tables on cluster nodes."""
+
     __tablename__ = "test_distributed_users"
     id = Column(UInt64())
     name = Column(String())
@@ -36,7 +39,7 @@ class DistributedUsers(Table):
         cluster="default",  # Use built-in single-node 'default' cluster
         database="default",
         table="test_local_users",
-        sharding_key="rand()"  # Required for INSERT with multiple shards
+        sharding_key="rand()",  # Required for INSERT with multiple shards
     )
 
 
@@ -66,9 +69,7 @@ def setup_cluster_and_tables(engine):
     try:
         # Check if 'default' cluster is available (it usually is)
         try:
-            cluster_check = session.execute(
-                "SELECT count() FROM system.clusters WHERE cluster = 'default'"
-            ).scalar()
+            cluster_check = session.execute("SELECT count() FROM system.clusters WHERE cluster = 'default'").scalar()
             if cluster_check == 0:
                 pytest.skip("Cluster 'default' is not configured. Skipping Distributed table tests.")
         except Exception as e:
@@ -78,7 +79,7 @@ def setup_cluster_and_tables(engine):
         session.execute(f"DROP TABLE IF EXISTS {DistributedUsers.__tablename__}")
         session.execute(f"DROP TABLE IF EXISTS {LocalUsers.__tablename__}")
 
-        # Create local table 
+        # Create local table
         session.execute(LocalUsers.create_table(exists_ok=True))
         session.commit()
 
@@ -150,7 +151,7 @@ def test_insert_into_distributed_table(engine, setup_cluster_and_tables):
 
     for user in data:
         session.execute(insert(DistributedUsers).values(**user.to_dict()))
-    
+
     session.commit()
 
     # Verify data was inserted
@@ -180,7 +181,7 @@ def test_select_from_distributed_table(engine, setup_cluster_and_tables):
 
     for user in data:
         session.execute(insert(LocalUsers).values(**user.to_dict()))
-    
+
     session.commit()
 
     # Select from Distributed table
@@ -204,12 +205,7 @@ def test_distributed_table_with_sharding_key(engine, setup_cluster_and_tables):
         __tablename__ = "test_distributed_users_sharded"
         id = Column(UInt64())
         name = Column(String())
-        __engine__ = Distributed(
-            cluster="default",
-            database="default",
-            table="test_local_users",
-            sharding_key="id"
-        )
+        __engine__ = Distributed(cluster="default", database="default", table="test_local_users", sharding_key="id")
 
     try:
         session.execute(f"DROP TABLE IF EXISTS {DistributedUsersSharded.__tablename__}")

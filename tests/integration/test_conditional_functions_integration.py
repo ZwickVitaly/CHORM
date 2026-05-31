@@ -1,12 +1,24 @@
 """Integration tests for ClickHouse conditional and array functions."""
 
 import os
-import pytest
-from chorm import Table, Column, MergeTree, select, insert, create_engine
-from chorm.session import Session
-from chorm.types import UInt64, String, Float64, Array
-from chorm.sql.expression import func, sum_if, count_if, avg_if, min_if, max_if, uniq_if, group_uniq_array, sum_array, avg_array
 
+import pytest
+
+from chorm import Column, MergeTree, Table, create_engine, insert, select
+from chorm.session import Session
+from chorm.sql.expression import (
+    avg_array,
+    avg_if,
+    count_if,
+    func,
+    group_uniq_array,
+    max_if,
+    min_if,
+    sum_array,
+    sum_if,
+    uniq_if,
+)
+from chorm.types import Array, Float64, String, UInt64
 
 # Skip integration tests if ClickHouse is not available
 pytestmark = pytest.mark.skipif(

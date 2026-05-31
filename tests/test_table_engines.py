@@ -6,13 +6,12 @@ import pytest
 
 from chorm.table_engines import (
     ENGINE_CLASSES,
-    AggregatingMergeTree,
     Distributed,
     EngineConfigurationError,
     MergeTree,
     MySQL,
-    ReplicatedMergeTree,
     ReplacingMergeTree,
+    ReplicatedMergeTree,
     StripeLog,
     TableEngine,
 )

@@ -1,7 +1,7 @@
 """Unit tests for WITH TOTALS functionality."""
 
-from chorm import select, Table, Column, MergeTree, func
-from chorm.types import UInt64, String
+from chorm import Column, MergeTree, Table, func, select
+from chorm.types import String, UInt64
 
 
 class Order(Table):

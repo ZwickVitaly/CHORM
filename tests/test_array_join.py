@@ -1,9 +1,8 @@
 """Unit tests for ARRAY JOIN functionality."""
 
-import pytest
-from chorm import Table, Column, MergeTree, select
-from chorm.types import UInt64, String, Array
-from chorm.sql.expression import Identifier, Literal, func
+from chorm import Column, MergeTree, Table, select
+from chorm.sql.expression import Identifier, Literal
+from chorm.types import Array, String, UInt64
 
 
 class User(Table):

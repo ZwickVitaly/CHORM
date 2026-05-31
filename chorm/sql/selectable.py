@@ -3,24 +3,24 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Sequence, Union, TYPE_CHECKING
-from chorm.sql.explain import Explain
+from typing import Any, Dict, List, Optional, Union
 
-from chorm.sql.expression import (
-    Expression,
-    Identifier,
-    Subquery,
-    ScalarSubquery,
-    CTE,
-    Window,
-    _coerce,
-    WindowFunction,
-    BinaryExpression,
-    UnaryExpression,
-    FunctionCall,
-    Label,
-)
 from chorm.exceptions import QueryValidationError
+from chorm.sql.explain import Explain
+from chorm.sql.expression import (
+    CTE,
+    BinaryExpression,
+    Expression,
+    FunctionCall,
+    Identifier,
+    Label,
+    ScalarSubquery,
+    Subquery,
+    UnaryExpression,
+    Window,
+    WindowFunction,
+    _coerce,
+)
 
 
 def _has_window_function(expr: Any) -> bool:
@@ -103,11 +103,11 @@ class Select(Expression):
         self._columns: List[Expression] = []
         for c in columns:
             if hasattr(c, "__tablename__") and hasattr(c, "__table__") and hasattr(c.__table__, "columns"):
-                 # Handle Table class: expand to all columns
-                 for col_info in c.__table__.columns:
-                     self._columns.append(col_info.column)
+                # Handle Table class: expand to all columns
+                for col_info in c.__table__.columns:
+                    self._columns.append(col_info.column)
             else:
-                 self._columns.append(_coerce(c))
+                self._columns.append(_coerce(c))
         self._from: Optional[Expression] = None
         self._joins: List[Union[JoinClause, ArrayJoinClause]] = []
         self._where_criteria: List[Expression] = []
@@ -565,7 +565,7 @@ class Select(Expression):
 
     def to_sql(self, compiler: Any = None) -> str:
         """Render the SELECT statement to SQL.
-        
+
         Args:
             compiler: Optional Compiler instance to collect parameters.
         """
@@ -683,57 +683,11 @@ class Select(Expression):
 
 
 def select(*columns: Any) -> Select:
-    """Create a new Select statement."""
-    # Auto-detect FROM clause if a Table class is passed as the first argument
-    # and it's the only argument, or if we want to support select(User) -> SELECT * FROM user
+    """Create a new Select statement.
 
-    # For now, simple implementation:
-    # If the first argument is a Table class (has __tablename__), use it as FROM
-    # and select * (or columns if specified).
-
-    # Actually, SQLAlchemy behavior: select(User) -> SELECT user.id, user.name FROM user
-    # We need to inspect the columns.
-
-    # If columns contains a Table class, we should expand it to its columns?
-    # Or just let the user handle it?
-
-    # Let's stick to explicit columns for now, but if a Table is passed, we treat it as "all columns of table"
-    # AND set the FROM clause.
-
-    # But wait, I can't import Table here.
-    # I'll check for __tablename__ and __table__ attributes.
-
-    expanded_columns = []
-    from_obj = None
-
-    for col in columns:
-        if hasattr(col, "__tablename__") and hasattr(col, "__table__"):
-            # It's a Table class
-            if from_obj is None:
-                from_obj = col
-            # Expand to columns
-            # We need to access the columns from the Table metadata
-            # This requires the Table to be fully initialized.
-            # Since we can't import Table, we rely on the object structure.
-            if hasattr(col, "__table__"):
-                # Assuming __table__ is TableMetadata
-                # We can't easily iterate columns without importing ColumnInfo?
-                # Actually, we can just use "*" for now if we select the whole table.
-                # But SQLAlchemy expands it.
-                pass
-            expanded_columns.append(col)  # We'll handle Table in _coerce or Select logic?
-        else:
-            expanded_columns.append(col)
-
-    # Refined logic:
-    # If we pass a Table class to Select, we probably want to select from it.
-    # But Select constructor takes *columns.
-    # Let's just pass everything to Select constructor and let the user call select_from if needed,
-    # OR we can try to be smart.
-
-    # Let's keep it simple: select(User) -> Select(User).
-    # Inside Select, we might need to handle Table objects in _columns.
-
+    If a Table class is passed as the first argument, it will be automatically
+    used for the FROM clause.
+    """
     stmt = Select(*columns)
 
     # Attempt to infer FROM
@@ -803,9 +757,6 @@ def window(
     # Convert order_by to list
     order_list = []
     if order_by:
-        if isinstance(order_by, (list, tuple)):
-            order_list = [_coerce(o) for o in order_by]
-        else:
-            order_list = [_coerce(order_by)]
+        order_list = [_coerce(o) for o in order_by] if isinstance(order_by, (list, tuple)) else [_coerce(order_by)]
 
     return Window(partition_by=partition_list, order_by=order_list, frame=frame)

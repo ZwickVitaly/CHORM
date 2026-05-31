@@ -11,17 +11,23 @@ exclude .gitignore
 exclude .python-version
 exclude .env
 exclude .env.example
+exclude .pre-commit-config.yaml
 exclude docker-compose.yml
 exclude chorm.toml
 exclude uv.lock
 recursive-exclude tests *
 recursive-exclude .git *
+recursive-exclude .github *
 recursive-exclude .pytest_cache *
+recursive-exclude .ruff_cache *
 recursive-exclude __pycache__ *
 recursive-exclude *.egg-info *
 recursive-exclude .venv *
 recursive-exclude .agent *
 recursive-exclude migrations *
+recursive-exclude dist *
+recursive-exclude docker *
+recursive-exclude scripts *
 
 # Exclude development docs
 exclude IMPLEMENTATION_PLAN.md

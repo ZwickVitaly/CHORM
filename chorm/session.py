@@ -2,21 +2,23 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Type, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Type
 
-from chorm.declarative import Table
-from chorm.engine import Engine
-from chorm.result import Result
+from chorm.result import Result, StreamResult
 from chorm.sql.dml import Delete, Insert, Update
 from chorm.sql.selectable import Select
+
+if TYPE_CHECKING:
+    from chorm.declarative import Table
+    from chorm.engine import Engine
 
 
 class Session:
     """Manages persistence operations for ORM objects.
-    
+
     Note: This is NOT a transactional session. ClickHouse is an OLAP database
     and does not support traditional ACID transactions for most operations.
-    
+
     - `commit()` flushes pending inserts to the database (no rollback possible)
     - `clear()` discards pending inserts from memory (does not affect database)
     """
@@ -28,17 +30,17 @@ class Session:
 
     def execute(self, statement: Any, parameters: Optional[Dict[str, Any]] = None) -> Result:
         """Execute a SQL statement.
-        
+
         Args:
             statement: SQL statement (string or selectable/DML object)
             parameters: Optional dictionary of parameters for the query
-            
+
         Returns:
             Result object
         """
         if isinstance(statement, Select):
             sql, compiled_params = self.bind.compile(statement)
-            
+
             final_params = compiled_params
             if parameters:
                 final_params = compiled_params.copy()
@@ -80,6 +82,41 @@ class Session:
                     self.bind.execute(sql, **self._connect_overrides)
                 return Result(None)
 
+    def stream(
+        self,
+        statement: Any,
+        parameters: Optional[Dict[str, Any]] = None,
+        model: Optional[Type[Table]] = None,
+    ) -> StreamResult:
+        """Stream query results synchronously.
+
+        Args:
+            statement: Select or raw SQL query string
+            parameters: Optional dictionary of query parameters
+            model: Optional model class to map rows to
+
+        Returns:
+            StreamResult context manager
+        """
+        if isinstance(statement, Select):
+            sql, compiled_params = self.bind.compile(statement)
+            final_params = compiled_params
+            if parameters:
+                final_params = compiled_params.copy()
+                final_params.update(parameters)
+        else:
+            sql = str(statement).strip()
+            final_params = parameters
+
+        conn_ctx = self.bind.connection(**self._connect_overrides)
+        conn = conn_ctx.__enter__()
+        try:
+            stream_context = conn.client.query_row_block_stream(sql, parameters=final_params)
+            return StreamResult(stream_context, conn_ctx, model=model)
+        except Exception:
+            conn_ctx.__exit__(None, None, None)
+            raise
+
     def add(self, instance: Table) -> None:
         """Add an instance to the session for pending insertion.
 
@@ -108,7 +145,7 @@ class Session:
             ValidationError: If any instance validation fails
         """
         # Validate all instances before committing
-        for model_cls, instances in self._pending_inserts.items():
+        for _, instances in self._pending_inserts.items():
             for instance in instances:
                 instance.validate()
 
@@ -145,7 +182,7 @@ class Session:
 
     def clear(self) -> None:
         """Clear pending inserts from memory.
-        
+
         This does NOT rollback any database changes - ClickHouse inserts
         are immediate and cannot be rolled back. This only discards
         objects added via `add()` that haven't been committed yet.
@@ -154,7 +191,7 @@ class Session:
 
     def rollback(self) -> None:
         """Alias for `clear()`. Kept for SQLAlchemy compatibility.
-        
+
         Note: This does NOT rollback database changes.
         """
         self.clear()
@@ -163,13 +200,25 @@ class Session:
         """Close the session."""
         self._pending_inserts.clear()
 
+    def __enter__(self) -> Session:
+        """Context manager entry."""
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        """Context manager exit. Commits on success, rolls back on error, and closes."""
+        if exc_type is None:
+            self.commit()
+        else:
+            self.rollback()
+        self.close()
+
     def query_df(self, statement: Any, parameters: Optional[Dict[str, Any]] = None) -> Any:
         """Execute a query and return a pandas DataFrame.
-        
+
         Args:
             statement: SQL statement (string or selectable object)
             parameters: Optional dictionary of parameters
-            
+
         Returns:
             pandas.DataFrame
         """
@@ -182,5 +231,5 @@ class Session:
         else:
             sql = str(statement)
             final_params = parameters
-            
+
         return self.bind.query_df(sql, parameters=final_params, **self._connect_overrides)

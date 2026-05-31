@@ -3,11 +3,11 @@
 import pytest
 
 from chorm.query_settings import (
-    QuerySettings,
+    SETTINGS_PRESETS,
     ExecutionStats,
     QueryOptimizer,
+    QuerySettings,
     get_preset,
-    SETTINGS_PRESETS,
 )
 
 

@@ -17,15 +17,16 @@ CHORM provides a comprehensive validation system that ensures data integrity bef
 ## Quick Start
 
 ```python
-from chorm import Table, Column, Int32, String, Session, create_engine
+from chorm import Table, Column, Session, create_engine, ValidationError
+from chorm.types import Int32, String
 from chorm.validators import RangeValidator, EmailValidator, LengthValidator
 from chorm.table_engines import MergeTree
 
 class User(Table):
     __tablename__ = "users"
+    __engine__ = MergeTree()
     __order_by__ = ("id",)
-    engine = MergeTree()
-    
+
     id = Column(Int32(), primary_key=True)
     age = Column(Int32(), validators=[RangeValidator(0, 150)])
     email = Column(String(), validators=[EmailValidator()])
@@ -275,7 +276,7 @@ class User(Table):
     __tablename__ = "users"
     __order_by__ = ("id",)
     engine = MergeTree()
-    
+
     id = Column(Int32(), primary_key=True)
     name = Column(String(), nullable=True, validators=[LengthValidator(1, 100)])
     email = Column(String(), nullable=False, validators=[EmailValidator()])
@@ -390,7 +391,8 @@ except ValidationError as e:
 ## Complete Example
 
 ```python
-from chorm import Table, Column, Int32, String, Float64, Session, create_engine
+from chorm import Table, Column, Session, create_engine
+from chorm.types import Int32, String, Float64
 from chorm.validators import (
     RangeValidator,
     EmailValidator,
@@ -404,14 +406,14 @@ from chorm.table_engines import MergeTree
 
 class Product(Table):
     __tablename__ = "products"
+    __engine__ = MergeTree()
     __order_by__ = ("id",)
-    engine = MergeTree()
-    
+
     id = Column(Int32(), primary_key=True)
     name = Column(String(), validators=[LengthValidator(1, 200)])
     price = Column(Float64(), validators=[RangeValidator(0, 1000000)])
     status = Column(String(), validators=[InValidator(['active', 'inactive', 'archived'])])
-    
+
     def validate_price_precision(self, value, column_name=None):
         """Ensure price is precise to cents."""
         if round(value, 2) != value:
@@ -441,7 +443,7 @@ try:
     session.add(product)
     session.commit()
     print("Product created successfully!")
-    
+
 except ValidationError as e:
     print(f"Validation failed: {e}")
 ```
@@ -458,4 +460,3 @@ except ValidationError as e:
 - **Clear errors** - `ValidationError` provides column name and value for debugging
 
 Validation ensures data integrity at the ORM level, catching errors before they reach the database!
-

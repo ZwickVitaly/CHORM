@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, datetime
-from typing import Any, Tuple, Union, Optional, List
+from typing import Any, List, Optional, Tuple, Union
+
+from chorm.utils import escape_string
 
 
 class Expression:
@@ -12,7 +14,7 @@ class Expression:
 
     def to_sql(self, compiler: Any = None) -> str:
         """Render the expression as a SQL string.
-        
+
         Args:
             compiler: Optional Compiler instance to collect parameters.
         """
@@ -125,8 +127,6 @@ class Identifier(Expression):
         return self.name
 
 
-from chorm.utils import escape_string
-
 @dataclass(frozen=True)
 class Literal(Expression):
     value: Any
@@ -134,7 +134,7 @@ class Literal(Expression):
     def to_sql(self, compiler: Any = None) -> str:
         if compiler is not None:
             return compiler.add_param(self.value)
-            
+
         if isinstance(self.value, str):
             return f"'{escape_string(self.value)}'"
         if self.value is None:
@@ -156,7 +156,7 @@ class Raw(Expression):
 
 def text(sql: str) -> Raw:
     """Create a raw SQL expression.
-    
+
     Example:
         select(text("count(*) as c")).select_from(text("users"))
     """
@@ -174,7 +174,7 @@ class FunctionCall(Expression):
 
     def __call__(self, *args: Any) -> "FunctionCall":
         """Allow function calls to be parameterized (curried).
-        
+
         This enables syntax like quantileState(0.5)(value) for parameterized functions.
         """
         coerced_args = tuple(_coerce(arg) for arg in args)
@@ -205,10 +205,7 @@ class FunctionCall(Expression):
 
         order_list = []
         if order_by:
-            if isinstance(order_by, (list, tuple)):
-                order_list = [_coerce(p) for p in order_by]
-            else:
-                order_list = [_coerce(order_by)]
+            order_list = [_coerce(p) for p in order_by] if isinstance(order_by, (list, tuple)) else [_coerce(order_by)]
 
         window = Window(partition_by=partition_list, order_by=order_list, frame=frame)
         return WindowFunction(self, window)
@@ -217,11 +214,12 @@ class FunctionCall(Expression):
 @dataclass(frozen=True)
 class ParameterizedFunctionCall(Expression):
     """Represents a parameterized function call like quantileState(0.5)(value).
-    
+
     In ClickHouse, some functions like quantileState are parameterized:
     - quantileState(0.5) returns a function that takes a value
     - quantileState(0.5)(value) is the full call
     """
+
     name: str
     params: Tuple[Expression, ...]
     args: Tuple[Expression, ...]
@@ -256,10 +254,7 @@ class ParameterizedFunctionCall(Expression):
 
         order_list = []
         if order_by:
-            if isinstance(order_by, (list, tuple)):
-                order_list = [_coerce(p) for p in order_by]
-            else:
-                order_list = [_coerce(order_by)]
+            order_list = [_coerce(p) for p in order_by] if isinstance(order_by, (list, tuple)) else [_coerce(order_by)]
 
         window = Window(partition_by=partition_list, order_by=order_list, frame=frame)
         return WindowFunction(self, window)
@@ -1231,10 +1226,10 @@ def any_last(expr: Any) -> FunctionCall:
 
 def any_heavy(expr: Any) -> FunctionCall:
     """Return frequently occurring value (heavy hitter).
-    
+
     Args:
         expr: Expression to sample
-        
+
     Example:
         select(anyHeavy(User.browser)).select_from(User)
     """
@@ -1243,11 +1238,11 @@ def any_heavy(expr: Any) -> FunctionCall:
 
 def arg_max(expr: Any, value: Any) -> FunctionCall:
     """Return the value of `expr` for the row with maximum `value`.
-    
+
     Args:
         expr: Expression to return
         value: Expression to maximize
-        
+
     Example:
         # Get the name of the user with the latest update
         select(
@@ -1260,11 +1255,11 @@ def arg_max(expr: Any, value: Any) -> FunctionCall:
 
 def arg_min(expr: Any, value: Any) -> FunctionCall:
     """Return the value of `expr` for the row with minimum `value`.
-    
+
     Args:
         expr: Expression to return
         value: Expression to minimize
-        
+
     Example:
         # Get the name of the user with the earliest creation
         select(
@@ -1329,9 +1324,9 @@ def dict_has(dict_name: str, id_expr: Any) -> FunctionCall:
 
 def sum_state(value: Any) -> FunctionCall:
     """Create sum state for AggregateFunction(sum, ...).
-    
+
     Used when inserting into AggregateFunction columns.
-    
+
     Example:
         insert(Metrics).values(sum_state=sum_state(Order.amount))
     """
@@ -1340,9 +1335,9 @@ def sum_state(value: Any) -> FunctionCall:
 
 def sum_merge(value: Any) -> FunctionCall:
     """Merge sum states and return final result.
-    
+
     Used when selecting from AggregateFunction(sum, ...) columns.
-    
+
     Example:
         select(sum_merge(Metrics.revenue_state)).select_from(Metrics)
     """
@@ -1393,68 +1388,50 @@ def uniq_exact_merge(value: Any) -> FunctionCall:
 
 def quantile_state(level: Any, expr: Any) -> ParameterizedFunctionCall:
     """Create quantile state for AggregateFunction(quantile(...), ...).
-    
+
     In ClickHouse, quantileState is a parameterized function:
     quantileState(0.5)(value) - where 0.5 is the parameter and value is the argument.
     """
     from chorm.sql.expression import ParameterizedFunctionCall
-    return ParameterizedFunctionCall(
-        "quantileState",
-        params=(_coerce(level),),
-        args=(_coerce(expr),)
-    )
+
+    return ParameterizedFunctionCall("quantileState", params=(_coerce(level),), args=(_coerce(expr),))
 
 
 def quantile_merge(level: Any, value: Any) -> ParameterizedFunctionCall:
     """Merge quantile states and return final result.
-    
+
     In ClickHouse, quantileMerge is a parameterized function:
     quantileMerge(0.5)(state) - where 0.5 is the parameter and state is the argument.
     """
     from chorm.sql.expression import ParameterizedFunctionCall
-    return ParameterizedFunctionCall(
-        "quantileMerge",
-        params=(_coerce(level),),
-        args=(_coerce(value),)
-    )
+
+    return ParameterizedFunctionCall("quantileMerge", params=(_coerce(level),), args=(_coerce(value),))
 
 
 def quantiles_state(levels: Any, expr: Any) -> ParameterizedFunctionCall:
     """Create quantiles state for AggregateFunction(quantiles(...), ...).
-    
+
     In ClickHouse, quantilesState is a parameterized function:
     quantilesState(0.5, 0.9)(value) - where [0.5, 0.9] are parameters and value is the argument.
     """
     from chorm.sql.expression import ParameterizedFunctionCall
+
     # Handle list/tuple of levels
-    if isinstance(levels, (list, tuple)):
-        params = tuple(_coerce(level) for level in levels)
-    else:
-        params = (_coerce(levels),)
-    return ParameterizedFunctionCall(
-        "quantilesState",
-        params=params,
-        args=(_coerce(expr),)
-    )
+    params = tuple(_coerce(level) for level in levels) if isinstance(levels, (list, tuple)) else (_coerce(levels),)
+    return ParameterizedFunctionCall("quantilesState", params=params, args=(_coerce(expr),))
 
 
 def quantiles_merge(levels: Any, value: Any) -> ParameterizedFunctionCall:
     """Merge quantiles states and return final result.
-    
+
     In ClickHouse, quantilesMerge is a parameterized function:
     quantilesMerge(0.5, 0.9)(state) - where [0.5, 0.9] are parameters and state is the argument.
     """
     from chorm.sql.expression import ParameterizedFunctionCall
+
     # Handle list/tuple of levels
-    if isinstance(levels, (list, tuple)):
-        params = tuple(_coerce(level) for level in levels)
-    else:
-        params = (_coerce(levels),)
-    return ParameterizedFunctionCall(
-        "quantilesMerge",
-        params=params,
-        args=(_coerce(value),)
-    )
+    params = tuple(_coerce(level) for level in levels) if isinstance(levels, (list, tuple)) else (_coerce(levels),)
+    return ParameterizedFunctionCall("quantilesMerge", params=params, args=(_coerce(value),))
 
 
 def min_state(value: Any) -> FunctionCall:
@@ -1482,9 +1459,9 @@ def max_merge(value: Any) -> FunctionCall:
 
 def sum_if_state(column: Any, condition: Any) -> FunctionCall:
     """Create sumIf state for AggregateFunction(sumIf, ...).
-    
+
     Used when inserting into AggregateFunction(sumIf, ...) columns.
-    
+
     Example:
         insert(Metrics).values(sum_state=sum_if_state(Order.amount, Order.status == 'completed'))
     """
@@ -1493,7 +1470,7 @@ def sum_if_state(column: Any, condition: Any) -> FunctionCall:
 
 def sum_if_merge(value: Any) -> FunctionCall:
     """Merge sumIf states and return final result.
-    
+
     Used when selecting from AggregateFunction(sumIf, ...) columns.
     """
     return func.sumIfMerge(value)

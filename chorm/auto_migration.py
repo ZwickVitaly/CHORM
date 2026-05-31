@@ -2,19 +2,18 @@
 
 from __future__ import annotations
 
-from typing import List, Dict, Any, Set, Optional, Tuple, Type
-from dataclasses import dataclass
-from pathlib import Path
 import importlib.util
 import sys
-import ast
-from collections import defaultdict
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Type
 
-from chorm.declarative import Table, TableMetadata
-from chorm.introspection import TableIntrospector
-from chorm.types import parse_type, FieldType
-from chorm.migration import Migration
 from chorm.ddl import format_ddl
+from chorm.declarative import Table, TableMetadata
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    from chorm.introspection import TableIntrospector
 
 
 @dataclass
@@ -45,7 +44,7 @@ class TableDiff:
             self.column_diffs = []
         # Set qualified_name from model_metadata if available
         if self.qualified_name is None and self.model_metadata:
-            self.qualified_name = getattr(self.model_metadata, 'qualified_name', self.table_name)
+            self.qualified_name = getattr(self.model_metadata, "qualified_name", self.table_name)
         elif self.qualified_name is None:
             self.qualified_name = self.table_name
 
@@ -84,7 +83,7 @@ class ModelLoader:
         # After loading, we can check if any tables were registered in metadata
         # But since we are loading modules dynamically, we rely on the side effect of class definition
         # which registers the table in the Metadata.
-        
+
         # However, to be compatible with explicit returns, we can still inspect module attributes.
         table_classes = []
         for attr_name in dir(module):
@@ -130,9 +129,9 @@ class ModelLoader:
 
 class MigrationGenerator:
     """Generate migrations by comparing models with database state.
-    
+
     SAFETY NOTES:
-    - DROP DATABASE is NEVER auto-generated. Users must manually create 
+    - DROP DATABASE is NEVER auto-generated. Users must manually create
       migrations for database drops if needed.
     - DROP TABLE is generated for tables that exist in DB but not in models.
     - 'default' database tables are compared within that database only.
@@ -143,9 +142,7 @@ class MigrationGenerator:
         self.introspector = introspector
         self.database = database
 
-    def compare_tables(
-        self, model_tables: Dict[str, TableMetadata], db_tables: List[str]
-    ) -> List[TableDiff]:
+    def compare_tables(self, model_tables: Dict[str, TableMetadata], db_tables: List[str]) -> List[TableDiff]:
         """Compare model tables with database tables and generate diffs."""
         db_table_set = set(db_tables)
         model_table_set = set(model_tables.keys())
@@ -169,7 +166,7 @@ class MigrationGenerator:
             # Check if it's a migration table or system table, although introspection usually filters system tables
             if table_name == "chorm_migrations":
                 continue
-                
+
             db_info = self.introspector.get_table_info(table_name, self.database)
             diffs.append(
                 TableDiff(
@@ -182,9 +179,7 @@ class MigrationGenerator:
 
         # Tables to alter (in both)
         for table_name in model_table_set & db_table_set:
-            table_diff = self._compare_table(
-                model_tables[table_name], table_name
-            )
+            table_diff = self._compare_table(model_tables[table_name], table_name)
             if table_diff:
                 diffs.append(table_diff)
 
@@ -195,29 +190,30 @@ class MigrationGenerator:
         db_info = self.introspector.get_table_info(table_name, self.database)
 
         column_diffs = self._compare_columns(model_metadata, db_info)
-        
+
         query_modified = False
         is_mv = model_metadata.engine and model_metadata.engine.engine_name == "MaterializedView"
         is_db_mv = db_info.get("engine") == "MaterializedView"
-        
+
         if is_mv and is_db_mv:
             # Check if query changed
             create_query = db_info.get("create_query", "")
             # Extract AS SELECT part
             import re
+
             select_match = re.search(r"AS\s+(SELECT.*)", create_query, re.IGNORECASE | re.DOTALL)
             db_select = select_match.group(1).strip() if select_match else ""
-            
+
             model_select = model_metadata.select_query
             if model_select:
-                 # Normalize both for comparison
-                 # This is tricky as formatting/macros might differ
-                 # For now, simple whitespace normalization
-                 def normalize(s):
-                     return " ".join(str(s).split())
-                 
-                 if normalize(model_select) != normalize(db_select):
-                     query_modified = True
+                # Normalize both for comparison
+                # This is tricky as formatting/macros might differ
+                # For now, simple whitespace normalization
+                def normalize(s):
+                    return " ".join(str(s).split())
+
+                if normalize(model_select) != normalize(db_select):
+                    query_modified = True
 
         if not column_diffs and not query_modified:
             return None  # No differences
@@ -231,11 +227,9 @@ class MigrationGenerator:
             query_modified=query_modified,
         )
 
-    def _compare_columns(
-        self, model_metadata: TableMetadata, db_info: Dict[str, Any]
-    ) -> List[ColumnDiff]:
+    def _compare_columns(self, model_metadata: TableMetadata, db_info: Dict[str, Any]) -> List[ColumnDiff]:
         """Compare columns between model and database.
-        
+
         Compares:
         - Column existence (add/drop)
         - Column types (modify)
@@ -249,9 +243,9 @@ class MigrationGenerator:
         model_columns = {col.name: col for col in model_metadata.columns}
         db_columns_list = db_info.get("columns", [])
         db_columns = {col["name"]: col for col in db_columns_list}
-        
+
         # Track column positions in DB for AFTER clause
-        db_column_positions = {col["name"]: i for i, col in enumerate(db_columns_list)}
+        {col["name"]: i for i, col in enumerate(db_columns_list)}
 
         model_col_names = set(model_columns.keys())
         db_col_names = set(db_columns.keys())
@@ -267,7 +261,7 @@ class MigrationGenerator:
                     if prev_col_name in db_col_names:
                         after_column = prev_col_name
                         break
-                
+
                 diff = ColumnDiff(
                     name=col.name,
                     action="add",
@@ -304,7 +298,7 @@ class MigrationGenerator:
                 modify_reasons.append("type")
 
             # Compare codecs
-            model_codec = getattr(model_col.column, 'codec', None)
+            model_codec = getattr(model_col.column, "codec", None)
             db_codec_raw = db_col.get("codec", "")
             # DB returns "CODEC(ZSTD(1))" format, extract inner
             db_codec = ""
@@ -313,16 +307,16 @@ class MigrationGenerator:
                     db_codec = db_codec_raw[6:-1]
                 else:
                     db_codec = db_codec_raw
-            
+
             # Normalize codec comparison
             if self._codecs_differ(model_codec, db_codec):
                 needs_modify = True
                 modify_reasons.append("codec")
 
             # Compare comments
-            model_comment = getattr(model_col.column, 'comment', None) or ""
+            model_comment = getattr(model_col.column, "comment", None) or ""
             db_comment = db_col.get("comment", "") or ""
-            
+
             if model_comment != db_comment:
                 needs_modify = True
                 modify_reasons.append("comment")
@@ -338,21 +332,21 @@ class MigrationGenerator:
                 diffs.append(diff)
 
         return diffs
-    
+
     def _codecs_differ(self, model_codec: Optional[str], db_codec: str) -> bool:
         """Check if codecs differ between model and database."""
         # Normalize both to comparable strings
         model_str = str(model_codec) if model_codec else ""
         db_str = db_codec.strip() if db_codec else ""
-        
+
         # Remove whitespace for comparison
         model_str = model_str.replace(" ", "")
         db_str = db_str.replace(" ", "")
-        
+
         # Both empty = no difference
         if not model_str and not db_str:
             return False
-        
+
         return model_str != db_str
 
     def _types_differ(self, model_type: str, db_type: str) -> bool:
@@ -384,7 +378,7 @@ class MigrationGenerator:
     ) -> str:
         """Generate migration Python code from diffs."""
         import warnings
-        
+
         # Warn user about destructive DROP TABLE operations
         drop_tables = [d.qualified_name for d in diffs if d.action == "drop"]
         if drop_tables:
@@ -394,7 +388,7 @@ class MigrationGenerator:
                     UserWarning,
                     stacklevel=2,
                 )
-        
+
         class_name = migration_name.replace("_", "").replace(" ", "").title().replace(" ", "")
         if not class_name[0].isupper():
             class_name = class_name.capitalize()
@@ -443,7 +437,7 @@ class MigrationGenerator:
                 # Recreate table (Drop + Create)
                 upgrade_lines.append(f"        # Recreate table {diff.qualified_name} (Query changed)")
                 upgrade_lines.append(f"        session.execute('DROP TABLE IF EXISTS {diff.qualified_name}')")
-                
+
                 if diff.model_metadata:
                     ddl = format_ddl(diff.model_metadata, if_not_exists=True)
                     # Escape quotes in DDL and format as multiline string
@@ -455,7 +449,7 @@ class MigrationGenerator:
                 upgrade_lines.append("")
 
             elif diff.action == "drop":
-                 # DROP TABLE - using self.drop_table() for smart size protection handling
+                # DROP TABLE - using self.drop_table() for smart size protection handling
                 upgrade_lines.append(f"        # Drop table {diff.qualified_name}")
                 upgrade_lines.append(f"        self.drop_table(session, '{diff.qualified_name}')")
                 upgrade_lines.append("")
@@ -470,14 +464,14 @@ class MigrationGenerator:
                         if col.column.default is not None:
                             col_def += f" DEFAULT {col.column.default!r}"
                         # Check for codec
-                        if hasattr(col.column, 'codec') and col.column.codec:
+                        if hasattr(col.column, "codec") and col.column.codec:
                             col_def += f" CODEC({col.column.codec})"
                         # Check for comment
-                        if hasattr(col.column, 'comment') and col.column.comment:
+                        if hasattr(col.column, "comment") and col.column.comment:
                             col_def += f" COMMENT '{col.column.comment}'"
-                        
+
                         # Add AFTER clause if available
-                        after_col = getattr(col_diff, 'after_column', None)
+                        after_col = getattr(col_diff, "after_column", None)
                         if after_col:
                             upgrade_lines.append(
                                 f"        self.add_column(session, '{diff.qualified_name}', '{col_diff.name} {col_def}', after='{after_col}')"
@@ -494,14 +488,14 @@ class MigrationGenerator:
                         col = col_diff.model_column
                         col_def = f"{col.column.ch_type}"
                         # Check for codec
-                        if hasattr(col.column, 'codec') and col.column.codec:
+                        if hasattr(col.column, "codec") and col.column.codec:
                             col_def += f" CODEC({col.column.codec})"
                         # Check for comment
-                        if hasattr(col.column, 'comment') and col.column.comment:
+                        if hasattr(col.column, "comment") and col.column.comment:
                             col_def += f" COMMENT '{col.column.comment}'"
-                        
+
                         # Add comment about what changed
-                        modify_reasons = getattr(col_diff, 'modify_reasons', [])
+                        modify_reasons = getattr(col_diff, "modify_reasons", [])
                         reason_comment = f"  # Changed: {', '.join(modify_reasons)}" if modify_reasons else ""
                         upgrade_lines.append(
                             f"        self.modify_column(session, '{diff.qualified_name}', '{col_diff.name} {col_def}'){reason_comment}"
@@ -521,7 +515,7 @@ class MigrationGenerator:
             if diff.action == "create":
                 downgrade_lines.append(f"        # Drop table {diff.qualified_name}")
                 downgrade_lines.append(f"        session.execute('DROP TABLE IF EXISTS {diff.qualified_name}')")
-            
+
             elif diff.action == "recreate":
                 # Downgrade refresh means we need to restore previous state.
                 # Since we don't have the old model, we can't easily restore EXCEPT if we rely on db_info?
@@ -558,7 +552,7 @@ class MigrationGenerator:
                         # Restore codec if available
                         if col_diff.db_column.get("codec"):
                             db_type += f" CODEC({col_diff.db_column['codec']})"
-                            
+
                         downgrade_lines.append(
                             f"        self.add_column(session, '{diff.qualified_name}', '{col_diff.name} {db_type}')"
                         )
@@ -567,7 +561,7 @@ class MigrationGenerator:
                         db_type = col_diff.db_column["type"]
                         # Restore codec if available
                         if col_diff.db_column.get("codec"):
-                             db_type += f" CODEC({col_diff.db_column['codec']})"
+                            db_type += f" CODEC({col_diff.db_column['codec']})"
 
                         downgrade_lines.append(
                             f"        self.modify_column(session, '{diff.qualified_name}', '{col_diff.name} {db_type}')"
@@ -590,9 +584,8 @@ class MigrationGenerator:
 
 
 __all__ = [
-    "ModelLoader",
-    "MigrationGenerator",
-    "TableDiff",
     "ColumnDiff",
+    "MigrationGenerator",
+    "ModelLoader",
+    "TableDiff",
 ]
-

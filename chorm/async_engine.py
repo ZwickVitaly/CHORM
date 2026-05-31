@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import os
-from typing import Any, Dict, Iterable, Mapping, Sequence
+from typing import Any, Dict, Iterable, Mapping, Sequence, Tuple
+from urllib.parse import urlparse
 
 import clickhouse_connect
 
 from chorm.engine import EngineConfig
-
+from chorm.exceptions import EngineConfigurationError
 
 _CONFIG_FIELDS = set(EngineConfig.__dataclass_fields__.keys())
 
@@ -47,8 +48,6 @@ class AsyncEngine:
                 connect_args=self._connect_args,
             )
 
-
-
     @property
     def config(self) -> EngineConfig:
         return self._config
@@ -60,25 +59,25 @@ class AsyncEngine:
 
     def compile(self, statement: Any) -> Tuple[str, Dict[str, Any]]:
         """Compile a statement into SQL and parameters.
-        
+
         Args:
             statement: SQL statement (string or selectable object)
-            
+
         Returns:
             Tuple of (sql, parameters)
         """
         from chorm.sql.compiler import Compiler
-        
+
         if hasattr(statement, "to_sql"):
             compiler = Compiler()
             # If statement has to_sql, use compiler
             if hasattr(statement.to_sql, "__code__") and statement.to_sql.__code__.co_argcount > 1:
-                 sql = statement.to_sql(compiler)
+                sql = statement.to_sql(compiler)
             else:
-                 sql = statement.to_sql()
-            
+                sql = statement.to_sql()
+
             return sql, compiler.params
-            
+
         return str(statement), {}
 
     def connect(
@@ -157,7 +156,7 @@ class AsyncEngine:
         **overrides: Any,
     ) -> Any:
         """Execute a query and return a pandas DataFrame.
-        
+
         Requires pandas to be installed.
         """
         async with self.connection(settings=settings, **overrides) as connection:
@@ -223,7 +222,20 @@ class AsyncEngine:
 
         client_kwargs.update(combined_args)
 
-        return await clickhouse_connect.get_async_client(**client_kwargs)
+        try:
+            get_async_client = getattr(clickhouse_connect, "get_async_client", None)
+            if get_async_client is None:
+                raise EngineConfigurationError(
+                    "Asynchronous features are not supported by your clickhouse-connect installation. "
+                    "Please upgrade clickhouse-connect to version >=1.1.1: "
+                    "pip install 'clickhouse-connect[async]>=1.1.1'"
+                )
+            return await get_async_client(**client_kwargs)
+        except (ImportError, ModuleNotFoundError) as e:
+            raise EngineConfigurationError(
+                "Asynchronous features require the 'async' extra to be installed with clickhouse-connect. "
+                "Please run: pip install 'clickhouse-connect[async]>=1.1.1'"
+            ) from e
 
 
 class AsyncConnection:
@@ -253,7 +265,7 @@ class AsyncConnection:
                 # Close the AsyncClient (shuts down ThreadPoolExecutor)
                 await self._client.close()
                 # Also force-close underlying HTTP connections to release TCP sockets
-                if hasattr(self._client, 'client') and hasattr(self._client.client, 'close_connections'):
+                if hasattr(self._client, "client") and hasattr(self._client.client, "close_connections"):
                     self._client.client.close_connections()
             except BaseException:
                 pass
@@ -370,11 +382,7 @@ def create_async_engine(
 
     Example:
         >>> # Explicit configuration
-        >>> engine = create_async_engine(
-        ...     host="localhost",
-        ...     username="default",
-        ...     password="password"
-        ... )
+        >>> engine = create_async_engine(host="localhost", username="default", password="password")
     """
     config = EngineConfig()
     url_connect_args: Dict[str, Any] = {}
@@ -384,23 +392,40 @@ def create_async_engine(
 
     # Collect explicit overrides
     overrides: Dict[str, Any] = {}
-    if host is not None: overrides["host"] = host
-    if port is not None: overrides["port"] = port
-    if username is not None: overrides["username"] = username
-    if password is not None: overrides["password"] = password
-    if database is not None: overrides["database"] = database
-    if secure is not None: overrides["secure"] = secure
-    if connect_timeout is not None: overrides["connect_timeout"] = connect_timeout
-    if send_receive_timeout is not None: overrides["send_receive_timeout"] = send_receive_timeout
-    if compress is not None: overrides["compress"] = compress
-    if query_limit is not None: overrides["query_limit"] = query_limit
-    if verify is not None: overrides["verify"] = verify
-    if ca_cert is not None: overrides["ca_cert"] = ca_cert
-    if client_cert is not None: overrides["client_cert"] = client_cert
-    if client_cert_key is not None: overrides["client_cert_key"] = client_cert_key
-    if http_proxy is not None: overrides["http_proxy"] = http_proxy
-    if https_proxy is not None: overrides["https_proxy"] = https_proxy
-    if client_name is not None: overrides["client_name"] = client_name
+    if host is not None:
+        overrides["host"] = host
+    if port is not None:
+        overrides["port"] = port
+    if username is not None:
+        overrides["username"] = username
+    if password is not None:
+        overrides["password"] = password
+    if database is not None:
+        overrides["database"] = database
+    if secure is not None:
+        overrides["secure"] = secure
+    if connect_timeout is not None:
+        overrides["connect_timeout"] = connect_timeout
+    if send_receive_timeout is not None:
+        overrides["send_receive_timeout"] = send_receive_timeout
+    if compress is not None:
+        overrides["compress"] = compress
+    if query_limit is not None:
+        overrides["query_limit"] = query_limit
+    if verify is not None:
+        overrides["verify"] = verify
+    if ca_cert is not None:
+        overrides["ca_cert"] = ca_cert
+    if client_cert is not None:
+        overrides["client_cert"] = client_cert
+    if client_cert_key is not None:
+        overrides["client_cert_key"] = client_cert_key
+    if http_proxy is not None:
+        overrides["http_proxy"] = http_proxy
+    if https_proxy is not None:
+        overrides["https_proxy"] = https_proxy
+    if client_name is not None:
+        overrides["client_name"] = client_name
 
     # Add kwargs to overrides if they match config keys
     extra_connect_args: Dict[str, Any] = {}
@@ -413,17 +438,15 @@ def create_async_engine(
     if overrides:
         config = config.with_overrides(**overrides)
 
-    # Set default password from environment if password is empty
-    if not config.password:
+    has_explicit_password = "password" in overrides or (url is not None and urlparse(url).password is not None)
+
+    # Set default password from environment or fallback if no explicit password was provided
+    if not has_explicit_password and not config.password:
         env_password = os.environ.get("CLICKHOUSE_PASSWORD")
         if env_password is not None:
             config = config.with_overrides(password=env_password)
-        elif not config.password and not overrides.get("password"):
-            # Default to "123" only if not explicitly set to empty string and no env var
-            pass
-            
-    if not config.password:
-        config = config.with_overrides(password="123")
+        else:
+            config = config.with_overrides(password="")
 
     merged_connect_args: Dict[str, Any] = dict(url_connect_args)
     merged_connect_args.update(extra_connect_args)

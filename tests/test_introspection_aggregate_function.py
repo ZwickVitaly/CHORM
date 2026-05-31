@@ -1,7 +1,9 @@
 """Tests for introspection: AggregateFunction types and Distributed tables."""
 
 import ast
+
 import pytest
+
 from chorm.introspection import ModelGenerator
 
 
@@ -228,9 +230,7 @@ class TestAggregateFunctionIntrospection:
                 # Count opening and closing parentheses
                 open_count = line.count("(")
                 close_count = line.count(")")
-                assert (
-                    open_count == close_count
-                ), f"Unbalanced parentheses in line: {line}"
+                assert open_count == close_count, f"Unbalanced parentheses in line: {line}"
 
 
 class TestDistributedIntrospection:
@@ -341,7 +341,7 @@ class TestIntrospectionImports:
         gen = ModelGenerator()
         gen.map_type("AggregateFunction(sum, UInt64)")
         imports = gen.generate_imports()
-        
+
         assert "from chorm import Table, Column" in imports
         assert "AggregateFunction" in imports
         assert "from chorm.sql.expression import func" in imports
@@ -352,7 +352,7 @@ class TestIntrospectionImports:
         gen = ModelGenerator()
         gen._map_engine("Distributed", "Distributed('cluster', 'db', 'table')")
         imports = gen.generate_imports()
-        
+
         assert "from chorm import Table, Column" in imports
         assert "Distributed" in imports
         assert "from chorm.table_engines import" in imports
@@ -362,7 +362,7 @@ class TestIntrospectionImports:
         gen = ModelGenerator()
         gen._map_engine("AggregatingMergeTree", "AggregatingMergeTree()")
         imports = gen.generate_imports()
-        
+
         assert "AggregatingMergeTree" in imports
         assert "from chorm.table_engines import" in imports
 
@@ -376,9 +376,9 @@ class TestIntrospectionImports:
         gen._map_engine("Distributed", "Distributed('cluster', 'db', 'table')")
         # Add AggregatingMergeTree
         gen._map_engine("AggregatingMergeTree", "AggregatingMergeTree()")
-        
+
         imports = gen.generate_imports()
-        
+
         # Verify all imports are present
         assert "from chorm import Table, Column" in imports
         assert "AggregateFunction" in imports

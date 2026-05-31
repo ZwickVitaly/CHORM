@@ -40,12 +40,9 @@ class ClickHouseBatchInsert:
 
     Example:
         >>> from clickhouse_connect import get_client
-        >>> client = get_client(host='localhost')
+        >>> client = get_client(host="localhost")
         >>>
-        >>> batch = ClickHouseBatchInsert(
-        ...     client, "users", ["id", "name", "email"],
-        ...     batch_size=100_000
-        ... )
+        >>> batch = ClickHouseBatchInsert(client, "users", ["id", "name", "email"], batch_size=100_000)
         >>>
         >>> # Add many rows
         >>> for i in range(1_000_000):
@@ -141,7 +138,7 @@ class ClickHouseBatchInsert:
 
         self._batches_sent += 1
 
-        logger.info(f"Inserted batch #{self._batches_sent}: {row_count} rows " f"into {self.table_name}")
+        logger.info(f"Inserted batch #{self._batches_sent}: {row_count} rows into {self.table_name}")
 
         return row_count
 
@@ -213,15 +210,10 @@ class ClickHouseBatchInsertFromDataFrame:
         >>> import pandas as pd
         >>> from clickhouse_connect import get_client
         >>>
-        >>> client = get_client(host='localhost')
-        >>> df = pd.DataFrame({
-        ...     'id': range(1_000_000),
-        ...     'name': [f'User{i}' for i in range(1_000_000)]
-        ... })
+        >>> client = get_client(host="localhost")
+        >>> df = pd.DataFrame({"id": range(1_000_000), "name": [f"User{i}" for i in range(1_000_000)]})
         >>>
-        >>> batch = ClickHouseBatchInsertFromDataFrame(
-        ...     client, "users", batch_size=100_000
-        ... )
+        >>> batch = ClickHouseBatchInsertFromDataFrame(client, "users", batch_size=100_000)
         >>> batch.insert_dataframe(df)
     """
 
@@ -258,7 +250,7 @@ class ClickHouseBatchInsertFromDataFrame:
             batch_size = len(batch_df)
             self._total_rows += batch_size
 
-            logger.info(f"Inserted batch #{self._batches_sent}: {batch_size} rows " f"into {self.table_name}")
+            logger.info(f"Inserted batch #{self._batches_sent}: {batch_size} rows into {self.table_name}")
 
         # Run OPTIMIZE TABLE if requested
         optimized = False
@@ -274,7 +266,7 @@ class ClickHouseBatchInsertFromDataFrame:
             "avg_batch_size": self._total_rows / self._batches_sent,
         }
 
-        logger.info(f"DataFrame insert complete: {stats['total_rows']} rows " f"in {stats['batches_sent']} batches")
+        logger.info(f"DataFrame insert complete: {stats['total_rows']} rows in {stats['batches_sent']} batches")
 
         return stats
 
@@ -304,19 +296,15 @@ def bulk_insert(
 
     Example:
         >>> from clickhouse_connect import get_client
-        >>> client = get_client(host='localhost')
+        >>> client = get_client(host="localhost")
         >>>
         >>> # From list of lists
         >>> data = [[1, "Alice"], [2, "Bob"], ...]
-        >>> stats = bulk_insert(
-        ...     client, "users", data,
-        ...     columns=["id", "name"],
-        ...     batch_size=100_000
-        ... )
+        >>> stats = bulk_insert(client, "users", data, columns=["id", "name"], batch_size=100_000)
         >>>
         >>> # From DataFrame
         >>> import pandas as pd
-        >>> df = pd.DataFrame({'id': [1, 2], 'name': ['Alice', 'Bob']})
+        >>> df = pd.DataFrame({"id": [1, 2], "name": ["Alice", "Bob"]})
         >>> stats = bulk_insert(client, "users", df)
     """
     # Check if it's a DataFrame
@@ -365,12 +353,12 @@ ClickHouse Batch Insert Performance Tips:
 
 Example (optimal):
     client = get_client(host='localhost')
-    
+
     # Accumulate 1M rows
     data = []
     for i in range(1_000_000):
         data.append([i, f'value{i}'])
-    
+
     # Insert in 100k batches
     bulk_insert(
         client, 'my_table', data,
@@ -382,10 +370,10 @@ Example (optimal):
 
 # Public API
 __all__ = [
+    "DEFAULT_BATCH_SIZE",
+    "PERFORMANCE_TIPS",
+    "RECOMMENDED_MIN_BATCH",
     "ClickHouseBatchInsert",
     "ClickHouseBatchInsertFromDataFrame",
     "bulk_insert",
-    "DEFAULT_BATCH_SIZE",
-    "RECOMMENDED_MIN_BATCH",
-    "PERFORMANCE_TIPS",
 ]

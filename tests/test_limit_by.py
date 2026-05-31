@@ -1,8 +1,7 @@
 """Unit tests for LIMIT BY functionality."""
 
-from chorm import select, Table, Column, MergeTree
-from chorm.types import UInt64, String
-from chorm.sql.expression import Identifier
+from chorm import Column, MergeTree, Table, select
+from chorm.types import String, UInt64
 
 
 class User(Table):

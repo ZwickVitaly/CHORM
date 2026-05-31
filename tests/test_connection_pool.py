@@ -13,6 +13,7 @@ from chorm.pool import ConnectionPool
 def config():
     """Create test EngineConfig."""
     import os
+
     password = os.getenv("CLICKHOUSE_PASSWORD", "123")
     return EngineConfig(host="localhost", port=8123, username="default", password=password, database="default")
 

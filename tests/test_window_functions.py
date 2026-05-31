@@ -1,9 +1,8 @@
 """Tests for Window Functions functionality."""
 
-import pytest
-from chorm import Table, Column, MergeTree, select
-from chorm.types import UInt64, String, DateTime
-from chorm.sql.expression import func, row_number, rank, dense_rank, lag, lead
+from chorm import Column, MergeTree, Table, select
+from chorm.sql.expression import dense_rank, func, lag, lead, rank, row_number
+from chorm.types import DateTime, String, UInt64
 
 
 class User(Table):

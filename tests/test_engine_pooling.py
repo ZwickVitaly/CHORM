@@ -1,9 +1,8 @@
 """Tests for engine integration with connection pooling."""
 
-import pytest
 from unittest.mock import MagicMock, patch
 
-from chorm.engine import create_engine, Engine
+from chorm.engine import Engine, create_engine
 from chorm.pool import ConnectionPool
 
 

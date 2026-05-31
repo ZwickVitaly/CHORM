@@ -10,17 +10,19 @@ decimal/DateTime variants, IP/UUID helpers, and composite wrappers such as
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import date as _date, datetime as _datetime
-from decimal import Decimal as _Decimal, ROUND_HALF_UP, getcontext, localcontext
-from ipaddress import IPv4Address, IPv6Address, ip_address
 import json
-from chorm.sql.expression import FunctionCall, Literal, _FunctionFactory
-from typing import Any, Dict, List, Optional, Tuple, Type, Mapping, Sequence, Union, Iterable
+from dataclasses import dataclass
+from datetime import date as _date
+from datetime import datetime as _datetime
+from decimal import ROUND_HALF_UP, getcontext, localcontext
+from decimal import Decimal as _Decimal
+from ipaddress import IPv4Address, IPv6Address, ip_address
+from typing import Any, Callable, Dict, Iterable, List, Mapping, Sequence, Union
 from uuid import UUID as _UUID
 from zoneinfo import ZoneInfo
 
 from chorm.exceptions import TypeConversionError
+from chorm.sql.expression import FunctionCall, Literal, _FunctionFactory
 
 # Backward compatibility alias
 ConversionError = TypeConversionError
@@ -78,7 +80,7 @@ class IntegerType(FieldType):
         except (TypeError, ValueError) as exc:
             raise ConversionError(f"Expected integer for {self.ch_type}, got {value!r}") from exc
         if not (self._min <= converted <= self._max):
-            raise ConversionError(f"Value {converted} out of range for {self.ch_type} " f"[{self._min}, {self._max}]")
+            raise ConversionError(f"Value {converted} out of range for {self.ch_type} [{self._min}, {self._max}]")
         return converted
 
 
@@ -510,7 +512,7 @@ class TupleType(FieldType):
             raise ConversionError(f"Expected sequence for {self.ch_type}, got {value!r}")
         if len(value) != len(self.elements):
             raise ConversionError(f"{self.ch_type} expects {len(self.elements)} items, got {len(value)}")
-        return tuple(field.to_python(item, context=context) for field, item in zip(self.elements, value))
+        return tuple(field.to_python(item, context=context) for field, item in zip(self.elements, value, strict=False))
 
     def to_clickhouse(self, value: Any, *, context: ConversionContext | None = None) -> Tuple[Any, ...] | None:
         if value is None:
@@ -519,7 +521,9 @@ class TupleType(FieldType):
             raise ConversionError(f"Expected sequence for {self.ch_type}, got {value!r}")
         if len(value) != len(self.elements):
             raise ConversionError(f"{self.ch_type} expects {len(self.elements)} items, got {len(value)}")
-        return tuple(field.to_clickhouse(item, context=context) for field, item in zip(self.elements, value))
+        return tuple(
+            field.to_clickhouse(item, context=context) for field, item in zip(self.elements, value, strict=False)
+        )
 
 
 class MapType(FieldType):
@@ -551,26 +555,26 @@ class MapType(FieldType):
 
 class AggregateFunctionType(FieldType):
     """Type for ClickHouse AggregateFunction.
-    
+
     AggregateFunction stores intermediate states of aggregate functions.
     Values are binary states (bytes) that can be merged using -Merge combinators.
-    
+
     Examples:
         from chorm.sql.expression import func
         from chorm.types import AggregateFunction, UInt64
-        
+
         # Using function from func namespace
         AggregateFunction(func.sum, UInt64())
         AggregateFunction(func.uniq, UInt64())
         AggregateFunction(func.quantile(0.5), UInt64())
-        
+
         # Or using string (for parse_type compatibility)
         AggregateFunction("sum", UInt64())
     """
-    
+
     def __init__(self, func_or_name: Any, *arg_types: FieldType) -> None:
         """Initialize AggregateFunction type.
-        
+
         Args:
             func_or_name: Either:
                 - FunctionCall from func namespace (e.g., func.sum('dummy'), func.quantile(0.5, 'dummy'))
@@ -580,8 +584,7 @@ class AggregateFunctionType(FieldType):
             *arg_types: Variable number of argument types for the aggregate function
         """
         # Extract function name from FunctionCall, _FunctionFactory, or use string directly
-        from chorm.sql.expression import FunctionCall, Literal
-        
+
         if isinstance(func_or_name, FunctionCall):
             # Extract function name and parameters from FunctionCall
             func_name = func_or_name.name
@@ -604,7 +607,7 @@ class AggregateFunctionType(FieldType):
                 else:
                     # If we hit a non-literal, stop - these are actual column args (ignored for AggregateFunction)
                     break
-            
+
             if param_args:
                 # Function with parameters: quantile(0.5) -> "quantile(0.5)"
                 func_name = f"{func_name}({', '.join(param_args)})"
@@ -612,37 +615,35 @@ class AggregateFunctionType(FieldType):
             func_name = func_or_name
         else:
             # Try to get name from _FunctionFactory (e.g., func.sum)
-            if isinstance(func_or_name, _FunctionFactory):
-                func_name = func_or_name.name
-            elif hasattr(func_or_name, 'name'):
+            if isinstance(func_or_name, _FunctionFactory) or hasattr(func_or_name, "name"):
                 func_name = func_or_name.name
             else:
                 raise ConversionError(
                     f"AggregateFunction first argument must be FunctionCall, _FunctionFactory, string, "
                     f"or function from func namespace, got {type(func_or_name).__name__}: {func_or_name!r}"
                 )
-        
+
         # Handle backward compatibility: if only one tuple is passed, unpack it
         if len(arg_types) == 1 and isinstance(arg_types[0], tuple):
             arg_types = arg_types[0]
-        
+
         # Build type string: AggregateFunction(func_name, type1, type2, ...)
         arg_types_str = ", ".join(arg_type.ch_type for arg_type in arg_types)
         ch_type = f"AggregateFunction({func_name}, {arg_types_str})" if arg_types else f"AggregateFunction({func_name})"
         super().__init__(ch_type)
         self.func_name = func_name
         self.arg_types = tuple(arg_types)  # Store as tuple for backward compatibility
-    
+
     def to_python(self, value: Any, *, context: ConversionContext | None = None) -> bytes | None:
         """Convert AggregateFunction state to Python representation.
-        
+
         AggregateFunction values are binary states. They are returned as bytes.
         To get actual aggregated values, use -Merge combinators in queries.
-        
+
         Args:
             value: Binary state from ClickHouse (bytes, bytearray, or None)
             context: Optional conversion context
-            
+
         Returns:
             bytes or None - the binary state representation
         """
@@ -655,11 +656,12 @@ class AggregateFunctionType(FieldType):
         if isinstance(value, str):
             # Some drivers might return base64-encoded strings
             import base64
+
             try:
                 return base64.b64decode(value)
             except Exception:
                 # If not base64, try to encode as UTF-8
-                return value.encode('utf-8')
+                return value.encode("utf-8")
         # Try to convert to bytes
         try:
             return bytes(value)
@@ -667,18 +669,18 @@ class AggregateFunctionType(FieldType):
             raise ConversionError(
                 f"Expected bytes, bytearray, or None for {self.ch_type}, got {type(value).__name__}: {value!r}"
             ) from exc
-    
+
     def to_clickhouse(self, value: Any, *, context: ConversionContext | None = None) -> bytes | None:
         """Convert Python value to AggregateFunction state for ClickHouse.
-        
+
         AggregateFunction states are typically created using -State combinators
         (e.g., sumState, uniqState) in INSERT queries, not directly from Python.
         However, this method allows passing binary states directly.
-        
+
         Args:
             value: Binary state (bytes, bytearray, or None)
             context: Optional conversion context
-            
+
         Returns:
             bytes or None - the binary state for ClickHouse
         """
@@ -691,10 +693,11 @@ class AggregateFunctionType(FieldType):
         if isinstance(value, str):
             # Try base64 decode first, then UTF-8 encode
             import base64
+
             try:
                 return base64.b64decode(value)
             except Exception:
-                return value.encode('utf-8')
+                return value.encode("utf-8")
         # Try to convert to bytes
         try:
             return bytes(value)
@@ -836,12 +839,12 @@ def parse_type(type_spec: str) -> FieldType:
         #   AggregateFunction(quantiles(0.5, 0.9), UInt64)
         if not args:
             raise ConversionError("AggregateFunction requires at least function name")
-        
+
         # First argument is function name (may include parameters like quantiles(0.5, 0.9))
         func_name = args[0]
         # Remaining arguments are argument types - unpack as *arg_types
         arg_types = [parse_type(arg) for arg in args[1:]] if len(args) > 1 else []
-        
+
         return AggregateFunctionType(func_name, *arg_types)
 
     raise ConversionError(f"Unsupported ClickHouse type '{name}'")
@@ -950,58 +953,58 @@ def Date() -> DateType:
 
 
 __all__ = [
+    "JSON",
+    "UUID",
+    "AggregateFunction",
     "AggregateFunctionType",
+    "Array",
     "ArrayType",
+    "BFloat16",
+    "Bool",
     "BooleanType",
     "ConversionContext",
     "ConversionError",
+    "Date",
+    "DateTime",
     "DateTimeType",
     "DateType",
+    "Decimal",
     "DecimalType",
+    "Enum",
     "EnumType",
     "FieldType",
+    "FixedString",
     "FixedStringType",
-    "FloatType",
-    "BFloat16",
     "Float32",
     "Float64",
-    "JSONType",
+    "FloatType",
     "IPAddressType",
-    "IntegerType",
+    "IPv4",
+    "IPv6",
     "Int8",
     "Int16",
     "Int32",
     "Int64",
     "Int128",
     "Int256",
+    "IntegerType",
+    "JSONType",
+    "LowCardinality",
     "LowCardinalityType",
+    "Map",
     "MapType",
+    "Nullable",
     "NullableType",
+    "String",
     "StringType",
+    "Tuple",
     "TupleType",
-    "UUIDType",
     "UInt8",
     "UInt16",
     "UInt32",
     "UInt64",
     "UInt128",
     "UInt256",
+    "UUIDType",
     "parse_type",
-    "String",
-    "FixedString",
-    "Array",
-    "Map",
-    "Tuple",
-    "Nullable",
-    "LowCardinality",
-    "Enum",
-    "Decimal",
-    "DateTime",
-    "Date",
-    "JSON",
-    "UUID",
-    "IPv4",
-    "IPv6",
-    "Bool",
-    "AggregateFunction",
 ]

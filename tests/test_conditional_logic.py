@@ -1,6 +1,6 @@
 """Unit tests for ClickHouse conditional functions (if, multiIf)."""
 
-from chorm.sql.expression import if_, multi_if, Literal, Identifier, BinaryExpression
+from chorm.sql.expression import BinaryExpression, Identifier, Literal, if_, multi_if
 
 
 def test_if_function():

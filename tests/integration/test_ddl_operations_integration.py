@@ -1,22 +1,24 @@
 """Integration tests for DDL operations with live ClickHouse."""
 
 import os
+
 import pytest
-from chorm import Table, Column, Session, create_engine
-from chorm.types import UInt64, String, UInt8
-from chorm.table_engines import MergeTree
+
+from chorm import Column, Session, Table, create_engine
 from chorm.sql.ddl import (
-    drop_table,
-    truncate_table,
-    rename_table,
     add_column,
+    add_index,
     drop_column,
+    drop_index,
+    drop_table,
     modify_column,
     rename_column,
-    add_index,
-    drop_index,
+    rename_table,
+    truncate_table,
 )
 from chorm.sql.expression import Identifier
+from chorm.table_engines import MergeTree
+from chorm.types import String, UInt64
 
 
 class DDLTestUser(Table):

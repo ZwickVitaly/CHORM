@@ -1,9 +1,8 @@
 """Tests for partition operations."""
 
-import pytest
 from chorm import (
-    detach_partition,
     attach_partition,
+    detach_partition,
     drop_partition,
     fetch_partition,
 )

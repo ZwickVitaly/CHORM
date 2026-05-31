@@ -1,15 +1,15 @@
 """Tests for ClickHouse-optimized batch operations."""
 
-from unittest.mock import MagicMock, call
+from unittest.mock import MagicMock
 
 import pytest
 
 from chorm.batch_optimized import (
+    DEFAULT_BATCH_SIZE,
+    RECOMMENDED_MIN_BATCH,
     ClickHouseBatchInsert,
     ClickHouseBatchInsertFromDataFrame,
     bulk_insert,
-    DEFAULT_BATCH_SIZE,
-    RECOMMENDED_MIN_BATCH,
 )
 
 

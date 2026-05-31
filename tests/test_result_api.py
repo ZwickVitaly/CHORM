@@ -1,9 +1,11 @@
 """Unit tests for Result API - Row class and result transformers."""
 
-import pytest
 from unittest.mock import MagicMock
-from chorm.result import Row, Result, ScalarResult, MappingResult, TupleResult
-from chorm.exceptions import NoResultFound, MultipleResultsFound
+
+import pytest
+
+from chorm.exceptions import MultipleResultsFound, NoResultFound
+from chorm.result import Result, Row
 
 
 class TestRowClass:

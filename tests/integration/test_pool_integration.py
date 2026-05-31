@@ -1,10 +1,11 @@
 """Integration tests for connection pooling with live ClickHouse."""
 
-import os
-import pytest
 import asyncio
-from chorm import create_engine, create_async_engine, ConnectionPool, AsyncConnectionPool
+import os
 
+import pytest
+
+from chorm import create_async_engine, create_engine
 
 # Skip all tests if CLICKHOUSE_HOST is not set
 pytestmark = pytest.mark.skipif(
@@ -133,7 +134,7 @@ class TestSyncConnectionPool:
     def test_pool_with_session(self, clickhouse_url):
         """Test pool integration with Session."""
         from chorm import Session, select
-        from chorm.declarative import Table, Column
+        from chorm.declarative import Column, Table
         from chorm.types import Int32, String
 
         engine = create_engine(clickhouse_url, pool_size=3)
@@ -162,7 +163,7 @@ class TestSyncConnectionPool:
         # Insert data
         session.execute(
             f"""
-            INSERT INTO {PoolTest.__tablename__} (id, name) 
+            INSERT INTO {PoolTest.__tablename__} (id, name)
             VALUES (1, 'test1'), (2, 'test2')
         """
         )
@@ -256,7 +257,6 @@ class TestAsyncConnectionPool:
     @pytest.mark.asyncio
     async def test_async_pool_connection_recycling(self, clickhouse_url):
         """Test that old async connections are recycled."""
-        import time
 
         # Create pool with short recycle time (1 second)
         engine = create_async_engine(clickhouse_url, pool_size=2, pool_recycle=1)
@@ -290,7 +290,7 @@ class TestAsyncConnectionPool:
     async def test_async_pool_with_session(self, clickhouse_url):
         """Test async pool integration with AsyncSession."""
         from chorm import AsyncSession, select
-        from chorm.declarative import Table, Column
+        from chorm.declarative import Column, Table
         from chorm.types import Int32, String
 
         engine = create_async_engine(clickhouse_url, pool_size=3)
@@ -320,7 +320,7 @@ class TestAsyncConnectionPool:
         # Insert data
         await session.execute(
             f"""
-            INSERT INTO {AsyncPoolTest.__tablename__} (id, name) 
+            INSERT INTO {AsyncPoolTest.__tablename__} (id, name)
             VALUES (1, 'test1'), (2, 'test2')
         """
         )

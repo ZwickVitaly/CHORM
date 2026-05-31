@@ -1,7 +1,7 @@
 """Tests for Dictionary support."""
 
 from chorm.sql.ddl import create_dictionary
-from chorm.sql.expression import dict_get, dict_get_or_default, dict_has, Identifier, Literal
+from chorm.sql.expression import Identifier, Literal, dict_get, dict_get_or_default, dict_has
 
 
 def test_create_dictionary_basic():

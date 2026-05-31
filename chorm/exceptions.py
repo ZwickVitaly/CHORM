@@ -322,30 +322,30 @@ ConversionError = TypeConversionError
 __all__ = [
     # Base
     "CHORMError",
+    # Configuration errors
+    "ConfigurationError",
+    "ConversionError",
+    "DatabaseAuthenticationError",
+    "DatabaseConnectionError",
     # Database errors
     "DatabaseError",
-    "DatabaseSyntaxError",
-    "DatabaseConnectionError",
-    "DatabaseAuthenticationError",
-    "DatabaseStorageError",
     "DatabaseMemoryError",
-    "classify_database_error",
+    "DatabaseStorageError",
+    "DatabaseSyntaxError",
+    "DeclarativeError",
+    # Backward compatibility
+    "EngineConfigurationError",
+    "InvalidQueryError",
+    "MultipleResultsFound",
+    "NoResultFound",
     # Query errors
     "QueryError",
-    "InvalidQueryError",
     "QueryValidationError",
     # Result errors
     "ResultError",
-    "NoResultFound",
-    "MultipleResultsFound",
     # Type errors
     "TypeConversionError",
     # Validation errors
     "ValidationError",
-    # Configuration errors
-    "ConfigurationError",
-    # Backward compatibility
-    "EngineConfigurationError",
-    "DeclarativeError",
-    "ConversionError",
+    "classify_database_error",
 ]

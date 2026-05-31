@@ -1,40 +1,44 @@
 """Integration test for comprehensive type coverage with MergeTree."""
 
 import os
-from datetime import datetime, date
+from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
 
-from chorm import Table, Column, create_engine, Session, select
+from chorm import Column, Session, Table, create_engine, select
+from chorm.table_engines import MergeTree
 from chorm.types import (
+    # Special types
+    UUID as UUIDType,
+)
+from chorm.types import (
+    # Composite
+    Array,
+    # Dates
+    Date,
+    DateTime,
+    FixedString,
+    # Floats
+    Float32,
+    Float64,
+    Int8,
+    Int16,
+    Int32,
+    Int64,
+    Map,
+    Nullable,
+    # Strings
+    String,
+    Tuple,
     # Integers
     UInt8,
     UInt16,
     UInt32,
     UInt64,
-    Int8,
-    Int16,
-    Int32,
-    Int64,
-    # Floats
-    Float32,
-    Float64,
-    # Strings
-    String,
-    FixedString,
-    # Dates
-    Date,
-    DateTime,
-    # Special types
-    UUID as UUIDType,
-    Decimal as DecimalType,
-    # Composite
-    Array,
-    Nullable,
-    Map,
-    Tuple,
 )
-from chorm.table_engines import MergeTree
+from chorm.types import (
+    Decimal as DecimalType,
+)
 
 
 class ComprehensiveTable(Table):
@@ -179,7 +183,7 @@ def main():
             "FROM test_comprehensive WHERE id = 1"
         )
         row = result.result_rows[0]
-        print(f"\n  DateTime column:")
+        print("\n  DateTime column:")
         print(f"    Value: {row[0]}")
         print(f"    Type: {row[1]}")
         print(f"    UTC conversion: {row[2]}")
@@ -188,7 +192,7 @@ def main():
     print("\n8. Testing numeric types...")
     with engine.connect() as conn:
         result = conn.query(
-            "SELECT uint8_col, int8_col, float32_col, float64_col, decimal_col " "FROM test_comprehensive WHERE id = 1"
+            "SELECT uint8_col, int8_col, float32_col, float64_col, decimal_col FROM test_comprehensive WHERE id = 1"
         )
         row = result.result_rows[0]
         print(f"\n  UInt8: {row[0]} (max: 255)")
@@ -200,7 +204,7 @@ def main():
     # Test composite types
     print("\n9. Testing composite types...")
     with engine.connect() as conn:
-        result = conn.query("SELECT array_col, map_col, tuple_col " "FROM test_comprehensive WHERE id = 1")
+        result = conn.query("SELECT array_col, map_col, tuple_col FROM test_comprehensive WHERE id = 1")
         row = result.result_rows[0]
         print(f"\n  Array: {row[0]}")
         print(f"  Map: {row[1]}")

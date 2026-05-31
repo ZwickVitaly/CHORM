@@ -1,9 +1,10 @@
 """Integration test for DDL and basic operations with real ClickHouse."""
 
 import os
-from chorm import Table, Column, create_engine, Session
-from chorm.types import UInt64, String, DateTime, Array, Nullable
+
+from chorm import Column, Table, create_engine
 from chorm.table_engines import MergeTree
+from chorm.types import Array, DateTime, Nullable, String, UInt64
 
 
 # Define test tables

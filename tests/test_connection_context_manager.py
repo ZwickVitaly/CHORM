@@ -1,10 +1,11 @@
 """Tests for connection context managers."""
 
-import pytest
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
-from chorm.engine import create_engine
+import pytest
+
 from chorm.async_engine import create_async_engine
+from chorm.engine import create_engine
 
 
 class TestSyncConnectionContextManager:

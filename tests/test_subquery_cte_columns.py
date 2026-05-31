@@ -1,10 +1,11 @@
 """Unit tests for Subquery and CTE column access (.c attribute)."""
 
 import pytest
-from chorm import select, func, cte
-from chorm.sql.expression import Identifier, Label
-from chorm.declarative import Table, Column
-from chorm.types import UInt32, String
+
+from chorm import cte, func, select
+from chorm.declarative import Column, Table
+from chorm.sql.expression import Identifier
+from chorm.types import String, UInt32
 
 
 # Test models

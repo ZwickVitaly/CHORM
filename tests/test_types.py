@@ -10,18 +10,16 @@ from zoneinfo import ZoneInfo
 import pytest
 
 from chorm.types import (
+    BFloat16,
     ConversionContext,
     ConversionError,
-    DateTimeType,
     DecimalType,
     EnumType,
-    MapType,
-    NullableType,
-    TupleType,
-    JSONType,
-    BFloat16,
     Float32,
     Int32,
+    JSONType,
+    MapType,
+    TupleType,
     UInt8,
     parse_type,
 )

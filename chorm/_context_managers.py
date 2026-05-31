@@ -2,8 +2,8 @@
 
 from typing import Any, Mapping
 
-from chorm.engine import Connection, Engine
 from chorm.async_engine import AsyncConnection, AsyncEngine
+from chorm.engine import Connection, Engine
 
 
 class _ConnectionContextManager:

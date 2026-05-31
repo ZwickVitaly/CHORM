@@ -1,17 +1,16 @@
 """MetaData class for schema definitions."""
 
-from typing import Dict, Any, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Dict
+
 from chorm.ddl import format_ddl
 
 if TYPE_CHECKING:
     from chorm.declarative import TableMetadata
-    from chorm.engine import Engine
-    from chorm.session import Session
 
 
 class MetaData:
     """Registry for database features.
-    
+
     Acts as a central registry for table definitions, matching SQLAlchemy's pattern.
     """
 
@@ -34,11 +33,11 @@ class MetaData:
 
     def drop_all(self, engine: Any) -> None:
         """Drop all tables stored in this metadata.
-        
+
         Args:
              engine: CHORM Engine instance, Session, or clickhouse_connect Client.
         """
-        for table_name in self.tables.keys():
+        for table_name in self.tables:
             sql = f"DROP TABLE IF EXISTS {table_name}"
             self._execute(engine, sql)
 

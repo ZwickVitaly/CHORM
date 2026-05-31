@@ -2,7 +2,6 @@
 
 from chorm.sql.expression import (
     FunctionCall,
-    Identifier,
     Literal,
     avg,
     coalesce,

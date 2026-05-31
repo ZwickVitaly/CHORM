@@ -7,7 +7,7 @@ import time
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -162,12 +162,12 @@ class MetricsCollector:
 
         # Log slow queries
         if metrics.is_slow(self.slow_query_threshold_ms):
-            logger.warning(f"Slow query detected ({metrics.duration_ms:.2f}ms): " f"{metrics.sql[:100]}...")
+            logger.warning(f"Slow query detected ({metrics.duration_ms:.2f}ms): {metrics.sql[:100]}...")
 
         # Log all queries if enabled
         if self.log_all_queries:
             status = "✓" if metrics.success else "✗"
-            logger.info(f"Query {status} ({metrics.duration_ms:.2f}ms): " f"{metrics.sql[:100]}...")
+            logger.info(f"Query {status} ({metrics.duration_ms:.2f}ms): {metrics.sql[:100]}...")
 
     def record_query(
         self, sql: str, duration_ms: float, success: bool = True, error: Optional[str] = None, **metadata: Any
@@ -272,7 +272,7 @@ class MetricsCollector:
             "total_duration_ms": self._total_duration_ms,
         }
 
-    def get_percentiles(self, percentiles: List[int] = [50, 90, 95, 99]) -> Dict[str, float]:
+    def get_percentiles(self, percentiles: List[int] | None = None) -> Dict[str, float]:
         """Get query duration percentiles.
 
         Args:
@@ -281,6 +281,8 @@ class MetricsCollector:
         Returns:
             Dictionary mapping percentile to duration in milliseconds
         """
+        if percentiles is None:
+            percentiles = [50, 90, 95, 99]
         if not self._metrics:
             return {f"p{p}": 0.0 for p in percentiles}
 
@@ -349,10 +351,10 @@ def disable_global_metrics() -> None:
 
 # Public API
 __all__ = [
-    "QueryMetrics",
     "MetricsCollector",
+    "QueryMetrics",
+    "disable_global_metrics",
+    "enable_global_metrics",
     "get_global_collector",
     "set_global_collector",
-    "enable_global_metrics",
-    "disable_global_metrics",
 ]

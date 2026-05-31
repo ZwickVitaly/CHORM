@@ -7,17 +7,18 @@ to unnest array columns in ClickHouse.
 """
 
 import os
-from chorm import Table, Column, MergeTree, select, insert, create_engine
+
+from chorm import Column, MergeTree, Table, create_engine, insert, select
 from chorm.session import Session
-from chorm.types import UInt64, String, Array
 from chorm.sql.expression import Identifier, func
+from chorm.types import Array, String, UInt64
 
 
 # Define our model
 class Product(Table):
     __tablename__ = "products_demo"
     __engine__ = MergeTree()
-    
+
     id = Column(UInt64(), primary_key=True)
     name = Column(String())
     tags = Column(Array(String()))
@@ -29,7 +30,7 @@ def main():
     host = os.getenv("CLICKHOUSE_HOST", "localhost")
     port = int(os.getenv("CLICKHOUSE_PORT", "8123"))
     database = os.getenv("CLICKHOUSE_DB", "default")
-    
+
     engine = create_engine(
         host=host,
         port=port,
@@ -39,87 +40,91 @@ def main():
     )
     session = Session(engine)
 
-    # 1. Setup: Create table and insert data
-    print("--- Setting up data ---")
-    session.execute(f"DROP TABLE IF EXISTS {Product.__tablename__}")
-    session.execute(Product.create_table())
+    try:
+        # 1. Setup: Create table and insert data
+        print("--- Setting up data ---")
+        session.execute(f"DROP TABLE IF EXISTS {Product.__tablename__}")
+        session.execute(Product.create_table())
 
-    products = [
-        Product(id=1, name="Laptop", tags=["electronics", "work"], prices=[1000, 950, 900]),
-        Product(id=2, name="Coffee", tags=["food", "drink"], prices=[5, 6]),
-        Product(id=3, name="Mystery Box", tags=[], prices=[]),  # Empty arrays
-    ]
-    
-    for p in products:
-        session.execute(insert(Product).values(**p.to_dict()))
-    session.commit()
+        products = [
+            Product(id=1, name="Laptop", tags=["electronics", "work"], prices=[1000, 950, 900]),
+            Product(id=2, name="Coffee", tags=["food", "drink"], prices=[5, 6]),
+            Product(id=3, name="Mystery Box", tags=[], prices=[]),  # Empty arrays
+        ]
 
-    # 2. Basic ARRAY JOIN
-    # Flatten tags for each product
-    print("\n--- Basic ARRAY JOIN (Flatten Tags) ---")
-    stmt = (
-        select(Product.name, Identifier("tag"))
-        .select_from(Product)
-        .array_join(Product.tags.label("tag"))
-        .order_by(Product.id, Identifier("tag"))
-    )
-    
-    print(f"SQL: {stmt.to_sql()}")
-    results = session.execute(stmt).all()
-    for row in results:
-        print(f"{row.name}: {row.tag}")
-    # Note: "Mystery Box" is excluded because it has empty tags
+        for p in products:
+            session.execute(insert(Product).values(**p.to_dict()))
+        session.commit()
 
-    # 3. LEFT ARRAY JOIN
-    # Include rows with empty arrays
-    print("\n--- LEFT ARRAY JOIN (Include Empty) ---")
-    stmt = (
-        select(Product.name, Identifier("tag"))
-        .select_from(Product)
-        .left_array_join(Product.tags.label("tag"))
-        .order_by(Product.id)
-    )
-    
-    print(f"SQL: {stmt.to_sql()}")
-    results = session.execute(stmt).all()
-    for row in results:
-        tag_display = row.tag if row.tag else "<empty>"
-        print(f"{row.name}: {tag_display}")
+        # 2. Basic ARRAY JOIN
+        # Flatten tags for each product
+        print("\n--- Basic ARRAY JOIN (Flatten Tags) ---")
+        stmt = (
+            select(Product.name, Identifier("tag"))
+            .select_from(Product)
+            .array_join(Product.tags.label("tag"))
+            .order_by(Product.id, Identifier("tag"))
+        )
 
-    # 4. Aggregation after ARRAY JOIN
-    # Count products per tag
-    print("\n--- Aggregation after ARRAY JOIN (Tag Counts) ---")
-    stmt = (
-        select(Identifier("tag"), func.count().label("count"))
-        .select_from(Product)
-        .array_join(Product.tags.label("tag"))
-        .group_by(Identifier("tag"))
-        .order_by(func.count().desc())
-    )
-    
-    print(f"SQL: {stmt.to_sql()}")
-    results = session.execute(stmt).all()
-    for row in results:
-        print(f"Tag '{row.tag}': {row.count}")
+        print(f"SQL: {stmt.to_sql()}")
+        results = session.execute(stmt).all()
+        for row in results:
+            print(f"{row.name}: {row.tag}")
+        # Note: "Mystery Box" is excluded because it has empty tags
 
-    # 5. Multiple Arrays (Chained)
-    # Cartesian product of tags and prices (be careful with this!)
-    print("\n--- Multiple Arrays (Chained - Cartesian Product) ---")
-    stmt = (
-        select(Product.name, Identifier("tag"), Identifier("price"))
-        .select_from(Product)
-        .array_join(Product.tags.label("tag"))
-        .array_join(Product.prices.label("price"))
-        .where(Product.name == "Coffee")
-    )
-    
-    print(f"SQL: {stmt.to_sql()}")
-    results = session.execute(stmt).all()
-    for row in results:
-        print(f"{row.name}: {row.tag} - ${row.price}")
+        # 3. LEFT ARRAY JOIN
+        # Include rows with empty arrays
+        print("\n--- LEFT ARRAY JOIN (Include Empty) ---")
+        stmt = (
+            select(Product.name, Identifier("tag"))
+            .select_from(Product)
+            .left_array_join(Product.tags.label("tag"))
+            .order_by(Product.id)
+        )
 
-    # Cleanup
-    session.execute(f"DROP TABLE IF EXISTS {Product.__tablename__}")
+        print(f"SQL: {stmt.to_sql()}")
+        results = session.execute(stmt).all()
+        for row in results:
+            tag_display = row.tag if row.tag else "<empty>"
+            print(f"{row.name}: {tag_display}")
+
+        # 4. Aggregation after ARRAY JOIN
+        # Count products per tag
+        print("\n--- Aggregation after ARRAY JOIN (Tag Counts) ---")
+        stmt = (
+            select(Identifier("tag"), func.count().label("count"))
+            .select_from(Product)
+            .array_join(Product.tags.label("tag"))
+            .group_by(Identifier("tag"))
+            .order_by(func.count().desc())
+        )
+
+        print(f"SQL: {stmt.to_sql()}")
+        results = session.execute(stmt).all()
+        for row in results:
+            print(f"Tag '{row.tag}': {row.count}")
+
+        # 5. Multiple Arrays (Chained)
+        # Cartesian product of tags and prices (be careful with this!)
+        print("\n--- Multiple Arrays (Chained - Cartesian Product) ---")
+        stmt = (
+            select(Product.name, Identifier("tag"), Identifier("price"))
+            .select_from(Product)
+            .array_join(Product.tags.label("tag"))
+            .array_join(Product.prices.label("price"))
+            .where(Product.name == "Coffee")
+        )
+
+        print(f"SQL: {stmt.to_sql()}")
+        results = session.execute(stmt).all()
+        for row in results:
+            print(f"{row.name}: {row.tag} - ${row.price}")
+
+        # Cleanup
+        session.execute(f"DROP TABLE IF EXISTS {Product.__tablename__}")
+    except Exception as e:
+        print(f"Skipping demo (ClickHouse connection failed): {e}")
+        print("Note: This demo requires a running ClickHouse instance.")
 
 
 if __name__ == "__main__":

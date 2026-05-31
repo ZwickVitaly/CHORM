@@ -1,10 +1,11 @@
 """Tests for health check utilities."""
 
-import pytest
-from unittest.mock import Mock, MagicMock, AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, Mock
 
-from chorm.health import HealthCheck, AsyncHealthCheck
+import pytest
+
 from chorm.engine import Engine, EngineConfig
+from chorm.health import AsyncHealthCheck, HealthCheck
 
 
 @pytest.fixture

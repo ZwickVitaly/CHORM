@@ -1,9 +1,8 @@
 """Tests for table-level granularity settings."""
 
-import pytest
-from chorm import Table, Column
-from chorm.types import UInt64, String, DateTime
+from chorm import Column, Table
 from chorm.table_engines import MergeTree, ReplacingMergeTree, SummingMergeTree
+from chorm.types import DateTime, String, UInt64
 
 
 def test_index_granularity_default():

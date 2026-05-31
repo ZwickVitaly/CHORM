@@ -9,21 +9,21 @@ This script demonstrates the new window function capabilities including:
 5. Window frames (Cumulative Sum)
 """
 
-import sys
 import os
+import sys
 
 # Add project root to python path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from chorm import Table, Column, MergeTree, select
-from chorm.types import UInt64, String, DateTime
-from chorm.sql.expression import func, row_number, rank, dense_rank, lag, lead
+from chorm import Column, MergeTree, Table, select
+from chorm.sql.expression import dense_rank, func, lag, lead, rank, row_number
+from chorm.types import DateTime, String, UInt64
 
 
 class User(Table):
     __tablename__ = "users"
     __engine__ = MergeTree()
-    
+
     id = Column(UInt64(), primary_key=True)
     name = Column(String())
     city = Column(String())
@@ -32,7 +32,7 @@ class User(Table):
 class Order(Table):
     __tablename__ = "orders"
     __engine__ = MergeTree()
-    
+
     id = Column(UInt64(), primary_key=True)
     user_id = Column(UInt64())
     amount = Column(UInt64())
@@ -49,7 +49,7 @@ def demo_row_number():
             order_by=Order.date.desc()
         ).label("rn")
     )
-    
+
     print("Python:")
     print('row_number().over(partition_by=Order.user_id, order_by=Order.date.desc())')
     print("\nSQL:")
@@ -64,7 +64,7 @@ def demo_ranking():
         rank().over(order_by=User.id.desc()).label("rank"),
         dense_rank().over(order_by=User.id.desc()).label("dense_rank")
     )
-    
+
     print("Python:")
     print('rank().over(order_by=User.id.desc())')
     print('dense_rank().over(order_by=User.id.desc())')
@@ -81,7 +81,7 @@ def demo_lag_lead():
         lag(Order.amount).over(partition_by=Order.user_id, order_by=Order.date).label("prev_amount"),
         lead(Order.amount).over(partition_by=Order.user_id, order_by=Order.date).label("next_amount")
     )
-    
+
     print("Python:")
     print('lag(Order.amount).over(partition_by=Order.user_id, order_by=Order.date)')
     print('lead(Order.amount).over(partition_by=Order.user_id, order_by=Order.date)')
@@ -102,7 +102,7 @@ def demo_cumulative_sum():
             frame="ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW"
         ).label("running_total")
     )
-    
+
     print("Python:")
     print('func.sum(Order.amount).over(')
     print('    partition_by=Order.user_id,')
@@ -116,7 +116,7 @@ def demo_cumulative_sum():
 if __name__ == "__main__":
     print("CHORM Window Functions Demo")
     print("===========================")
-    
+
     demo_row_number()
     demo_ranking()
     demo_lag_lead()

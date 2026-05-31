@@ -1,7 +1,6 @@
 """Tests for asynchronous connection pooling."""
 
 import asyncio
-import time
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -15,6 +14,7 @@ from chorm.engine import EngineConfig
 def config():
     """Create test EngineConfig."""
     import os
+
     password = os.getenv("CLICKHOUSE_PASSWORD", "123")
     return EngineConfig(host="localhost", port=8123, username="default", password=password, database="default")
 
@@ -50,6 +50,43 @@ class TestAsyncPoolInit:
         """Test pool rejects negative max_overflow."""
         with pytest.raises(ValueError, match="max_overflow must be non-negative"):
             AsyncConnectionPool(config, max_overflow=-1)
+
+    @pytest.mark.asyncio
+    async def test_initialization_failure_no_deadlock(self, config):
+        """Test that pool initialization failure cleans up successfully and prevents deadlock."""
+        pool = AsyncConnectionPool(config, pool_size=2)
+        created_connections = []
+
+        async def mock_create_connection():
+            if len(created_connections) == 0:
+                conn = MagicMock()
+                conn.close = AsyncMock()
+                created_connections.append(conn)
+                return conn
+            else:
+                raise RuntimeError("DB connection failure")
+
+        with (
+            patch.object(pool, "_create_connection", side_effect=mock_create_connection),
+            patch.object(pool, "_close_connection_safe", new_callable=AsyncMock) as mock_close_safe,
+        ):
+            with pytest.raises(RuntimeError, match="DB connection failure"):
+                await pool.initialize()
+
+            assert not pool._initialized
+            mock_close_safe.assert_called_once_with(created_connections[0])
+            assert pool._pool.empty()
+
+        # Check subsequent initialization succeeds
+        async def mock_create_connection_success():
+            conn = MagicMock()
+            conn.close = AsyncMock()
+            return conn
+
+        with patch.object(pool, "_create_connection", side_effect=mock_create_connection_success):
+            await pool.initialize()
+            assert pool._initialized
+            assert pool._pool.qsize() == 2
 
 
 class TestAsyncConnectionAcquisition:

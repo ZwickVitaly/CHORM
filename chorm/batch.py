@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import logging
 import warnings
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Union
+from typing import Any, Dict, Iterable, List, Optional, Sequence
 
 from chorm.batch_optimized import (
     ClickHouseBatchInsert,
     ClickHouseBatchInsertFromDataFrame,
+)
+from chorm.batch_optimized import (
     bulk_insert as _optimized_bulk_insert,
 )
 from chorm.utils import escape_string
@@ -44,7 +46,7 @@ class BatchInsert:
             "BatchInsert is deprecated and will be removed in a future version. "
             "Use chorm.batch.ClickHouseBatchInsert or chorm.batch.bulk_insert for native performance.",
             DeprecationWarning,
-            stacklevel=2
+            stacklevel=2,
         )
         self.table_name = table_name
         self.columns = columns
@@ -185,7 +187,7 @@ class BatchUpdate:
         warnings.warn(
             "BatchUpdate is deprecated. For large updates, consider using proper batch logic or direct client execution.",
             DeprecationWarning,
-            stacklevel=2
+            stacklevel=2,
         )
         self.table_name = table_name
         self.batch_size = batch_size
@@ -271,7 +273,7 @@ class BatchDelete:
         warnings.warn(
             "BatchDelete is deprecated. For large deletes, consider using proper batch logic or direct client execution.",
             DeprecationWarning,
-            stacklevel=2
+            stacklevel=2,
         )
         self.table_name = table_name
         self.batch_size = batch_size
@@ -369,10 +371,7 @@ def batch_update(table_name: str, updates: Iterable[tuple[Dict[str, Any], str]],
         List of UPDATE SQL statements
 
     Example:
-        >>> updates = [
-        ...     ({"status": "active"}, "id = 1"),
-        ...     ({"status": "inactive"}, "id = 2")
-        ... ]
+        >>> updates = [({"status": "active"}, "id = 1"), ({"status": "inactive"}, "id = 2")]
         >>> sqls = batch_update("users", updates)
     """
     batch = BatchUpdate(table_name, batch_size=batch_size)
@@ -420,13 +419,13 @@ def batch_delete(table_name: str, where_clauses: Iterable[str], batch_size: int 
 bulk_insert = _optimized_bulk_insert
 
 __all__ = [
+    "BatchDelete",
     "BatchInsert",
     "BatchUpdate",
-    "BatchDelete",
-    "batch_insert",
-    "batch_update",
-    "batch_delete",
     "ClickHouseBatchInsert",
     "ClickHouseBatchInsertFromDataFrame",
+    "batch_delete",
+    "batch_insert",
+    "batch_update",
     "bulk_insert",
 ]

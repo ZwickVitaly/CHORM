@@ -1,7 +1,7 @@
 """Tests for ASOF JOIN functionality."""
 
 from chorm import select
-from chorm.sql.expression import Identifier, Literal
+from chorm.sql.expression import Identifier
 
 
 def test_asof_join_basic():
